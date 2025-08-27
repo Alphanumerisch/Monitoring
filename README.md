@@ -1,7 +1,6 @@
 Globales ECS – Dokumentation & Erklärung
 Einleitung
-http://172.16.20.5:6875/link/19#bkmrk-diese-dokumentation-
- 
+
 Diese Dokumentation beschreibt die globalen ECS-Felder, die in allen Services (z. B. Veeam, Winlogbeat, UTM, iLO, NAS) im ELK-Stack verwendet werden. Ziel ist eine einheitliche Datenbasis für Logs und Metriken, unabhängig vom Ursprungssystem. Alle hier dokumentierten Felder sind so gewählt, dass sie serviceübergreifend konsistent genutzt werden können.
 
 Die Dokumentation erklärt:
