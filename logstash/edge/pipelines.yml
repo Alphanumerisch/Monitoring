@@ -1,0 +1,9 @@
+- pipeline.id: forwarder
+  path.config: "/etc/logstash/pipelines/forwarder/*.conf"
+  pipeline.workers: 2
+  pipeline.batch.size: 125
+  pipeline.ecs_compatibility: disabled
+  queue.type: persisted
+  path.queue: /var/lib/logstash/queue-forwarder
+  queue.max_bytes: 5gb
+
