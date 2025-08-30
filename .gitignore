@@ -1,0 +1,15 @@
+# Zertifikate / Keys / Secrets
+*.key
+*.crt
+*.pem
+*.pfx
+*.p12
+*.csr
+.env
+**/certs/*
+!**/certs/.gitkeep
+
+# Logs / Temp
+*.log
+*.tmp
+.DS_Store
