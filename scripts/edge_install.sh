@@ -147,65 +147,12 @@ else
     "${GIT_HOST}/${GIT_USER}/${GIT_REPO}.git" "$REPO_CLONE_DIR"
 fi
 
-SRC_PIPE_DIR="${REPO_CLONE_DIR}/logstash/Edge/Pipelines"
-install -d -m 0755 "$LS_PIPELINES_DIR"
-if [[ -d "$SRC_PIPE_DIR" ]]; then
-  rsync -a --delete "$SRC_PIPE_DIR"/ "$LS_PIPELINES_DIR"/
-  log "Pipelines nach ${LS_PIPELINES_DIR} synchronisiert."
+# Bevorzugt lowercase-Struktur; Fallback auf versehentliches 'Edge'
+BASE_EDGE_DIR=""
+if [[ -d "${REPO_CLONE_DIR}/logstash/edge" ]]; then
+  BASE_EDGE_DIR="${REPO_CLONE_DIR}/logstash/edge"
+elif [[ -d "${REPO_CLONE_DIR}/logstash/Edge" ]]; then
+  BASE_EDGE_DIR="${REPO_CLONE_DIR}/logstash/Edge"
 else
-  warn "Quellpfad für Pipelines nicht gefunden: $SRC_PIPE_DIR"
-fi
-
-for f in jvm.options logstash.yml pipelines.yml; do
-  SRC="${REPO_CLONE_DIR}/logstash/Edge/${f}"
-  DST="${LOGSTASH_ETC}/${f}"
-  if [[ -f "$SRC" ]]; then
-    [[ -f "$DST" ]] && cp -a "$DST" "${DST}.${TS}.bak"
-    install -m 0644 "$SRC" "$DST"
-    log "Config aktualisiert: $DST"
-  else
-    warn "Quelle fehlt: $SRC"
-  fi
-done
-
-systemctl restart logstash || warn "logstash Neustart fehlgeschlagen – prüfen!"
-
-# ---------- Basis-Hardening ----------
-warn "Basis-Footprint anpassen…"
-systemctl disable --now motd-news.service 2>/dev/null || true
-systemctl disable --now motd-news.timer   2>/dev/null || true
-systemctl disable --now cloud-init.service 2>/dev/null || true
-
-timedatectl set-timezone Europe/Berlin
-systemctl enable --now systemd-timesyncd 2>/dev/null || true
-
-# ---------- WireGuard-Konfiguration ----------
-log "Schreibe ${WG_CONF}…"
-cat >"$WG_CONF" <<EOF
-[Interface]
-PrivateKey = ${WG_PRIV_KEY}
-Address = ${WG_INTERFACE_IP}
-ListenPort = 51820
-
-[Peer]
-# !!! Peer PublicKey bitte eintragen !!!
-PublicKey = CHANGE_ME_PEER_PUBLIC_KEY
-Endpoint = vpn.labor-habermehl.de:51820
-AllowedIPs = 10.0.100.1/32, 172.16.60.1/32
-PersistentKeepalive = 25
-EOF
-chmod 600 "$WG_CONF"
-
-# ---------- Abschluss / Hinweise ----------
-PUBKEY="$(cat "$WG_PUB_FILE")"
-box "WG PUBLIC KEY (dieses Gerät)"
-printf "\033[1m%s\033[0m\n" "$PUBKEY"
-
-if grep -q 'CHANGE_ME_PEER_PUBLIC_KEY' "$WG_CONF"; then
-  warn "Peer-PublicKey fehlt noch in ${WG_CONF}. WireGuard wird NICHT gestartet."
-  warn "Nach Eintrag starten mit:  systemctl enable --now wg-quick@wg0"
-else
-  systemctl enable --now wg-quick@wg0
-fi
-
-log "Fertig. ENV: $ENV_PATH | Keys: $WG_PRIV_FILE (priv), $WG_PUB_FILE (pub)"
+  warn "Weder logstash/edge noch logstash/Edge vorhanden – überspringe Git-Deploy."
+  BASE_EDGE_DIR=""
