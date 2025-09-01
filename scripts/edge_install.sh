@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+ge#!/usr/bin/env bash
 # Edge-Setup: WireGuard + Logstash + Git-Pipelines
 # Achtung: Datei mit LF-Zeilenenden speichern (nicht CRLF)!
 set -euo pipefail
@@ -20,9 +20,9 @@ LS_PIPELINE_DIR="${LS_PIPELINE_DIR:-/etc/logstash/pipeline/forwarder}"
 LS_ETC_DIR="/etc/logstash"
 
 # Aus Repo zu holende Dateien/Ordner (Case-Sensitive wie im Repo!)
-REPO_EDGE_PIPELINES_PATH="${REPO_EDGE_PIPELINES_PATH:-logstash/Edge/Pipelines}"
-REPO_LOGSTASH_YML_PATH="${REPO_LOGSTASH_YML_PATH:-logstash/logstash.yml}"
-REPO_PIPELINES_YML_PATH="${REPO_PIPELINES_YML_PATH:-logstash/rz/pipelines.yml}"
+REPO_EDGE_PIPELINES_PATH="${REPO_EDGE_PIPELINES_PATH:-logstash/edge/Pipelines}"
+REPO_LOGSTASH_YML_PATH="${REPO_LOGSTASH_YML_PATH:-logstash/edge/logstash.yml}"
+REPO_PIPELINES_YML_PATH="${REPO_PIPELINES_YML_PATH:-logstash/edge/pipelines.yml}"
 
 # WireGuard
 EDGE_ENV="${EDGE_ENV:-/etc/wireguard/edge.env}"
@@ -210,4 +210,5 @@ echo "  sudo systemctl status logstash"
 echo
 echo "Public Key dieses Edge (falls erzeugt):"
 [[ -f /etc/wireguard/publickey ]] && cat /etc/wireguard/publickey || echo "(kein publickey erzeugt – siehe $EDGE_ENV)"
+
 
