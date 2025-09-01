@@ -1,31 +1,36 @@
 #!/usr/bin/env bash
-# edge_setup.sh – Edge-Appliance Bootstrapper
-# Anforderung: root-Rechte, Ubuntu/Debian
-# Autor: Meisters Helfer :)
+# edge_install.sh – Edge-Appliance Bootstrapper (Ubuntu/Debian)
+# - Legt /tmp/wg_env.env automatisch an, wenn nicht vorhanden (und beendet sich dann)
+# - Installiert WireGuard, aktiviert Forwarding, generiert/übernimmt Keys
+# - Entfernt Snaps
+# - Installiert Logstash (Elastic APT) + zieht Pipelines/Configs aus Git (dev)
+# - Setzt Timezone/Timesync
+# - Schreibt wg0.conf (Peer-PublicKey als Platzhalter)
+# - Am Ende: hebt den Public Key deutlich hervor
 
 set -Eeuo pipefail
 
-# ------------ Hilfsfunktionen ------------
+# ---------- Helpers ----------
 log()  { printf "\033[32m[+] %s\033[0m\n" "$*"; }
 warn() { printf "\033[33m[!] %s\033[0m\n" "$*"; }
 err()  { printf "\033[31m[-] %s\033[0m\n" "$*"; }
+box()  { local t="$1"; printf "\n\033[1;44m %s \033[0m\n" "$t"; }
 trap 'err "Fehler in Zeile $LINENO. Abbruch."' ERR
 
-# ------------ Root-Check ------------
+# ---------- Root required ----------
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
   err "Bitte als root ausführen."
   exit 1
 fi
 
-# ------------ Git/Repo-Parameter ------------
+# ---------- Repo-Parameter ----------
 GIT_HOST="https://github.com"
 GIT_USER="alphanumerisch"
 GIT_REPO="monitoring"
 GIT_BRANCH="dev"
-RAW_BASE="https://raw.githubusercontent.com/${GIT_USER}/${GIT_REPO}/${GIT_BRANCH}"
 
-# ------------ Pfade/Variablen ------------
-ENV_PATH="/tmp/wg_env.env"              # gemäß Vorgabe
+# ---------- Pfade ----------
+ENV_PATH="/tmp/wg_env.env"
 WG_DIR="/etc/wireguard"
 WG_CONF="${WG_DIR}/wg0.conf"
 WG_PRIV_FILE="${WG_DIR}/privatekey"
@@ -39,59 +44,48 @@ TS="$(date +%F_%H%M%S)"
 
 mkdir -p "$WORKDIR"
 
-# ------------ Schritt 1 / 2 / 3: wg_env.env prüfen/holen ------------
+# ---------- ENV prüfen/erzeugen ----------
 if [[ ! -f "$ENV_PATH" ]]; then
   warn "$ENV_PATH existiert nicht – lege neue Datei an."
-  cat >"$ENV_PATH" <<EOF
+  cat >"$ENV_PATH" <<'EOF'
 # WireGuard Environment Variablen
-# WG_PRIV_KEY wird automatisch generiert oder manuell eingetragen
-WG_PRIV_KEY=CHANGE_ME
+# WG_PRIV_KEY kann automatisch generiert werden, wenn hier "GENERATE" steht.
+WG_PRIV_KEY=GENERATE
 
-# IP-Adresse für dieses Edge-Gerät
-# Beispiel: 10.0.100.4/32
+# IP/Prefix dieses Edge-Geräts (z. B. 10.0.100.4/32)
 WG_INTERFACE_IP=CHANGE_ME
 EOF
   chmod 600 "$ENV_PATH"
-  warn "Bitte $ENV_PATH bearbeiten (PrivKey/IP eintragen)."
-  warn "Script beendet sich jetzt."
+  warn "Bitte $ENV_PATH bearbeiten (WG_INTERFACE_IP setzen; WG_PRIV_KEY auf GENERATE lassen oder Key eintragen)."
+  warn "Script beendet sich jetzt. Danach erneut starten."
   exit 0
 fi
 
-  # 2) Fallback: Git-Clone und suchen
-  if [[ -z "${GOT}" ]]; then
-    warn "Raw-Download fehlgeschlagen, clone Repository…"
-    rm -rf "$REPO_CLONE_DIR" || true
-    git clone --depth 1 --branch "$GIT_BRANCH" \
-      "${GIT_HOST}/${GIT_USER}/${GIT_REPO}.git" "$REPO_CLONE_DIR"
-    FOUND="$(find "$REPO_CLONE_DIR" -maxdepth 4 -type f -name wg_env.env | head -n1 || true)"
-    if [[ -n "${FOUND}" ]]; then
-      cp -f "$FOUND" "$ENV_PATH"
-      log "wg_env.env aus Repo: $FOUND -> $ENV_PATH"
-    fi
-  fi
-
-  if [[ ! -s "$ENV_PATH" ]]; then
-    err "Konnte wg_env.env nicht beziehen."
-    exit 2
-  fi
-
-  warn "Bitte $ENV_PATH editieren (WG_PRIV_KEY, WG_INTERFACE_IP). Script beendet sich jetzt."
-  exit 0
-fi
-
-# ------------ env laden ------------
+# ---------- ENV robust laden (CRLF -> LF) ----------
+TMP_ENV="$(mktemp)"
+sed 's/\r$//' "$ENV_PATH" > "$TMP_ENV"
 set -a
 # shellcheck disable=SC1090
-. "$ENV_PATH"
+. "$TMP_ENV"
 set +a
+rm -f "$TMP_ENV"
 
 WG_PRIV_KEY="${WG_PRIV_KEY:-}"
 WG_INTERFACE_IP="${WG_INTERFACE_IP:-}"
 
-# ------------ 1.1 WireGuard installieren & Forwarding aktivieren ------------
+if [[ -z "${WG_INTERFACE_IP}" || "${WG_INTERFACE_IP}" == "CHANGE_ME" ]]; then
+  err "WG_INTERFACE_IP ist nicht gesetzt. Bitte $ENV_PATH anpassen (z. B. 10.0.100.4/32)."
+  exit 2
+fi
+# /32 anhängen, falls kein Prefix
+if [[ "$WG_INTERFACE_IP" != */* ]]; then
+  WG_INTERFACE_IP="${WG_INTERFACE_IP}/32"
+fi
+
+# ---------- 1.1 WireGuard installieren & Forwarding ----------
 log "Installiere WireGuard & Tools…"
 apt-get update -y
-DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends wireguard qrencode
+DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends wireguard qrencode ca-certificates curl gnupg git rsync
 
 log "Aktiviere IPv4/IPv6 Forwarding…"
 install -d -m 0755 /etc/sysctl.d
@@ -101,77 +95,58 @@ install -d -m 0755 /etc/sysctl.d
 } | tee /etc/sysctl.d/99-wg.conf >/dev/null
 sysctl --system >/dev/null
 
-# Schlüsselverzeichnis
+# ---------- Keys erzeugen/übernehmen ----------
 install -d -m 0700 "$WG_DIR"
-
-# Priv-/PubKey erzeugen, falls nicht vorhanden/in ENV leer
-if [[ -z "${WG_PRIV_KEY}" || "${WG_PRIV_KEY}" == "AUTO" || "${WG_PRIV_KEY}" == "GENERATE" ]]; then
-  warn "WG_PRIV_KEY leer/auto → generiere Schlüssel…"
-  umask 077
+umask 077
+if [[ -z "${WG_PRIV_KEY}" || "${WG_PRIV_KEY}" == "GENERATE" || "${WG_PRIV_KEY}" == "AUTO" ]]; then
+  warn "WG_PRIV_KEY leer/GENERATE → generiere Schlüssel…"
   wg genkey | tee "$WG_PRIV_FILE" | wg pubkey > "$WG_PUB_FILE"
   WG_PRIV_KEY="$(cat "$WG_PRIV_FILE")"
   chmod 600 "$WG_PRIV_FILE" "$WG_PUB_FILE"
-
-  # WG_PRIV_KEY in env-Datei schreiben/ersetzen
+  # WG_PRIV_KEY in env-Datei zurückschreiben/ersetzen
   if grep -q '^WG_PRIV_KEY=' "$ENV_PATH"; then
     sed -i "s#^WG_PRIV_KEY=.*#WG_PRIV_KEY=${WG_PRIV_KEY}#g" "$ENV_PATH"
   else
     printf "\nWG_PRIV_KEY=%s\n" "$WG_PRIV_KEY" >> "$ENV_PATH"
   fi
-  log "PrivKey in $ENV_PATH aktualisiert. PublicKey: $WG_PUB_FILE"
 else
-  # wenn KEY in ENV vorhanden → Dateien aktualisieren
-  umask 077
   printf "%s\n" "$WG_PRIV_KEY" > "$WG_PRIV_FILE"
   chmod 600 "$WG_PRIV_FILE"
   printf "%s\n" "$WG_PRIV_KEY" | wg pubkey > "$WG_PUB_FILE"
   chmod 600 "$WG_PUB_FILE"
-  log "Schlüssel aus ENV übernommen. PublicKey: $WG_PUB_FILE"
 fi
 
-# IP absichern – /32 anhängen, falls vergessen
-if [[ "$WG_INTERFACE_IP" != */* ]]; then
-  WG_INTERFACE_IP="${WG_INTERFACE_IP}/32"
-fi
-
-# ------------ 1.2 Snaps entfernen (idempotent) ------------
+# ---------- 1.2 Snaps entfernen ----------
 warn "Entferne Snaps (falls vorhanden)…"
-snap remove --purge lxd 2>/dev/null || true
-snap remove --purge "core*" 2>/dev/null || true
+command -v snap >/dev/null 2>&1 && {
+  snap remove --purge lxd 2>/dev/null || true
+  snap remove --purge "core"* 2>/dev/null || true
+}
 apt-get purge -y snapd || true
 apt-get autoremove --purge -y || true
 
-# ------------ 1.3 Logstash (Elastic APT) installieren ------------
+# ---------- 1.3 Logstash (Elastic APT) ----------
 log "Installiere Logstash (Elastic APT)…"
-apt-get update -y
-DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends curl ca-certificates gnupg
-
 install -d -m 0755 /usr/share/keyrings
-curl -fsSL https://artifacts.elastic.co/GPG-KEY-elasticsearch \
-  | gpg --dearmor -o /usr/share/keyrings/elastic.gpg
-
-# Repo-Datei (immer neu schreiben – robust gegen Altlasten)
+curl -fsSL https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --dearmor -o /usr/share/keyrings/elastic.gpg
 cat >/etc/apt/sources.list.d/elastic-8.x.list <<'EOF'
 deb [signed-by=/usr/share/keyrings/elastic.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main
 EOF
-
 apt-get update -y
 DEBIAN_FRONTEND=noninteractive apt-get install -y logstash
 systemctl enable --now logstash
 
-# ------------ Pipelines & Configs aus Git ziehen ------------
+# ---------- Pipelines & Configs aus Git ziehen ----------
 log "Hole Logstash-Konfigurationen aus Git…"
-# Repo holen/aktualisieren
 if [[ -d "$REPO_CLONE_DIR/.git" ]]; then
   git -C "$REPO_CLONE_DIR" fetch origin "$GIT_BRANCH" --depth 1
-  git -C "$REPO_CLONE_DIR" checkout -f "origin/${GIT_BRANCH}"
+  git -C "$REPO_CLONE_DIR" reset --hard "origin/${GIT_BRANCH}"
 else
   rm -rf "$REPO_CLONE_DIR" || true
   git clone --depth 1 --branch "$GIT_BRANCH" \
     "${GIT_HOST}/${GIT_USER}/${GIT_REPO}.git" "$REPO_CLONE_DIR"
 fi
 
-# Pipelines kopieren
 SRC_PIPE_DIR="${REPO_CLONE_DIR}/logstash/Edge/Pipelines"
 install -d -m 0755 "$LS_PIPELINES_DIR"
 if [[ -d "$SRC_PIPE_DIR" ]]; then
@@ -181,14 +156,11 @@ else
   warn "Quellpfad für Pipelines nicht gefunden: $SRC_PIPE_DIR"
 fi
 
-# Hauptconfigs überschreiben (vorher Backup)
 for f in jvm.options logstash.yml pipelines.yml; do
   SRC="${REPO_CLONE_DIR}/logstash/Edge/${f}"
   DST="${LOGSTASH_ETC}/${f}"
   if [[ -f "$SRC" ]]; then
-    if [[ -f "$DST" ]]; then
-      cp -a "$DST" "${DST}.${TS}.bak"
-    fi
+    [[ -f "$DST" ]] && cp -a "$DST" "${DST}.${TS}.bak"
     install -m 0644 "$SRC" "$DST"
     log "Config aktualisiert: $DST"
   else
@@ -198,7 +170,7 @@ done
 
 systemctl restart logstash || warn "logstash Neustart fehlgeschlagen – prüfen!"
 
-# ------------ Basis-Hardening / Footprint ------------
+# ---------- Basis-Hardening ----------
 warn "Basis-Footprint anpassen…"
 systemctl disable --now motd-news.service 2>/dev/null || true
 systemctl disable --now motd-news.timer   2>/dev/null || true
@@ -207,8 +179,8 @@ systemctl disable --now cloud-init.service 2>/dev/null || true
 timedatectl set-timezone Europe/Berlin
 systemctl enable --now systemd-timesyncd 2>/dev/null || true
 
-# ------------ WireGuard-Konfiguration schreiben ------------
-log "Erzeuge ${WG_CONF}…"
+# ---------- WireGuard-Konfiguration ----------
+log "Schreibe ${WG_CONF}…"
 cat >"$WG_CONF" <<EOF
 [Interface]
 PrivateKey = ${WG_PRIV_KEY}
@@ -222,20 +194,18 @@ Endpoint = vpn.labor-habermehl.de:51820
 AllowedIPs = 10.0.100.1/32, 172.16.60.1/32
 PersistentKeepalive = 25
 EOF
-
 chmod 600 "$WG_CONF"
-log "wg0.conf geschrieben. Eigener PublicKey: $(cat "$WG_PUB_FILE")"
-warn "Bitte den Peer-PublicKey in ${WG_CONF} ersetzen (CHANGE_ME_PEER_PUBLIC_KEY)."
 
-# Sicherheitshalber NICHT starten, solange Peer-Key Platzhalter ist
+# ---------- Abschluss / Hinweise ----------
+PUBKEY="$(cat "$WG_PUB_FILE")"
+box "WG PUBLIC KEY (dieses Gerät)"
+printf "\033[1m%s\033[0m\n" "$PUBKEY"
+
 if grep -q 'CHANGE_ME_PEER_PUBLIC_KEY' "$WG_CONF"; then
-  warn "WG nicht gestartet, da Peer-Key fehlt. Start später mit: systemctl enable --now wg-quick@wg0"
+  warn "Peer-PublicKey fehlt noch in ${WG_CONF}. WireGuard wird NICHT gestartet."
+  warn "Nach Eintrag starten mit:  systemctl enable --now wg-quick@wg0"
 else
   systemctl enable --now wg-quick@wg0
 fi
 
-log "Fertig."
-log "ENV-Datei: $ENV_PATH"
-log "WG Keys:   $WG_PRIV_FILE (priv), $WG_PUB_FILE (pub)"
-
-
+log "Fertig. ENV: $ENV_PATH | Keys: $WG_PRIV_FILE (priv), $WG_PUB_FILE (pub)"
