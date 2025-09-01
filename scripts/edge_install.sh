@@ -154,13 +154,17 @@ else
   fi
 fi
 
-# ---------- Configs (nur wenn NICHT vorhanden) ----------
+# ---------- Configs ----------
 for f in jvm.options logstash.yml pipelines.yml; do
   SRC="${BASE_EDGE_DIR}/${f}"
   DST="${LOGSTASH_ETC}/${f}"
   if [[ -f "$SRC" ]]; then
     if [[ -f "$DST" ]]; then
-      log "Überspringe ${f} – Ziel existiert bereits (${DST})."
+      if [[ "$f" == "pipelines.yml" ]]; then
+        log "Überspringe pipelines.yml – existiert bereits (${DST})."
+      else
+        log "Überspringe ${f} – existiert bereits (${DST})."
+      fi
     else
       install -m 0644 "$SRC" "$DST"
       log "${f} -> ${DST}"
@@ -170,6 +174,7 @@ for f in jvm.options logstash.yml pipelines.yml; do
     warn "Fehlt im Repo: ${SRC}"
   fi
 done
+
 
 # ---------- Rechte auf Pipelines setzen ----------
 log "Setze Rechte für Pipelines…"
