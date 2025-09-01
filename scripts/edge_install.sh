@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # edge_install.sh – Edge-Appliance Bootstrapper (Ubuntu/Debian)
-# Idempotent:
-# - Pipelines (*.conf) nur beim ersten Lauf (wenn forwarder/ leer)
-# - Logstash-Configs nur, wenn nicht vorhanden (kein Überschreiben)
-# - Logstash-Neustart nur bei Änderungen
-# - Elastic-GPG-Key wird immer ohne Nachfrage ersetzt
+# Verhalten:
+# - Beim 1. Lauf: Logstash-Configs (jvm.options, logstash.yml, pipelines.yml) aus Git ÜBERSCHREIBEN (Backup anlegen)
+# - Ab dem 2. Lauf: diese drei NICHT mehr anfassen (Marker-Datei /etc/logstash/.edge_bootstrapped)
+# - Pipelines (*.conf) NUR beim 1. Lauf kopieren (wenn forwarder/ leer)
+# - Logstash nur neu starten, wenn sich was geändert hat
+# - Elastic GPG-Key immer ohne Nachfrage ersetzen
+# - Pipelines-Rechte: Gruppe logstash; Dirs 750, *.conf 640
+# - wg0.conf immer schreiben; am Ende PubKey anzeigen
 
 set -Eeuo pipefail
 
@@ -37,6 +40,7 @@ LS_PIPELINES_DIR="${LS_PIPELINES_ROOT}/forwarder"
 WORKDIR="/tmp/edge-setup"
 REPO_CLONE_DIR="${WORKDIR}/${GIT_REPO}"
 TS="$(date +%F_%H%M%S)"
+EDGE_MARKER="/etc/logstash/.edge_bootstrapped"
 
 mkdir -p "$WORKDIR" "$LS_PIPELINES_DIR"
 
@@ -63,8 +67,6 @@ rm -f "$TMP_ENV"
 
 WG_PRIV_KEY="${WG_PRIV_KEY:-GENERATE}"
 WG_INTERFACE_IP="${WG_INTERFACE_IP:-}"
-
-# Fallback IP, damit Script durchläuft
 if [[ -z "$WG_INTERFACE_IP" || "$WG_INTERFACE_IP" == "CHANGE_ME" ]]; then
   warn "WG_INTERFACE_IP nicht gesetzt – setze vorläufig 10.0.100.4/32 (bitte in $ENV_PATH anpassen)."
   WG_INTERFACE_IP="10.0.100.4/32"
@@ -93,7 +95,6 @@ if [[ "$WG_PRIV_KEY" == "GENERATE" || -z "$WG_PRIV_KEY" || "$WG_PRIV_KEY" == "AU
   wg genkey | tee "$WG_PRIV_FILE" | wg pubkey > "$WG_PUB_FILE"
   WG_PRIV_KEY="$(cat "$WG_PRIV_FILE")"
   chmod 600 "$WG_PRIV_FILE" "$WG_PUB_FILE"
-  # zurück in ENV
   if grep -q '^WG_PRIV_KEY=' "$ENV_PATH"; then
     sed -i "s#^WG_PRIV_KEY=.*#WG_PRIV_KEY=${WG_PRIV_KEY}#g" "$ENV_PATH"
   else
@@ -119,7 +120,6 @@ apt-get autoremove --purge -y || true
 # ---------- Logstash (Elastic APT) ----------
 log "Installiere Logstash (Elastic APT)…"
 install -d -m 0755 /usr/share/keyrings
-# Key immer ohne Nachfrage überschreiben
 rm -f /usr/share/keyrings/elastic.gpg
 curl -fsSL https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --dearmor -o /usr/share/keyrings/elastic.gpg
 cat >/etc/apt/sources.list.d/elastic-8.x.list <<'EOF'
@@ -136,13 +136,12 @@ git clone -q --depth 1 --branch "$GIT_BRANCH" \
   "${GIT_HOST}/${GIT_USER}/${GIT_REPO}.git" "$REPO_CLONE_DIR"
 BASE_EDGE_DIR="${REPO_CLONE_DIR}/logstash/edge"
 
-# Flag, ob wir Logstash neu starten müssen
 LS_CHANGED=false
 
 # ---------- Pipelines idempotent deployen ----------
 install -d -m 0755 "$LS_PIPELINES_DIR"
 if compgen -G "${LS_PIPELINES_DIR}/*.conf" >/dev/null; then
-  log "Pipelines existieren bereits in ${LS_PIPELINES_DIR} – überspringe Deploy (idempotent)."
+  log "Pipelines existieren bereits in ${LS_PIPELINES_DIR} – überspringe Deploy."
 else
   if [[ -d "${BASE_EDGE_DIR}/pipelines" ]]; then
     rsync -a --delete --include='*/' --include='*.conf' --exclude='*' \
@@ -154,27 +153,23 @@ else
   fi
 fi
 
-# ---------- Configs ----------
-for f in jvm.options logstash.yml pipelines.yml; do
-  SRC="${BASE_EDGE_DIR}/${f}"
-  DST="${LOGSTASH_ETC}/${f}"
-  if [[ -f "$SRC" ]]; then
-    if [[ -f "$DST" ]]; then
-      if [[ "$f" == "pipelines.yml" ]]; then
-        log "Überspringe pipelines.yml – existiert bereits (${DST})."
-      else
-        log "Überspringe ${f} – existiert bereits (${DST})."
-      fi
-    else
+# ---------- Configs: beim 1. Lauf überschreiben, danach nie wieder ----------
+if [[ ! -f "$EDGE_MARKER" ]]; then
+  for f in jvm.options logstash.yml pipelines.yml; do
+    SRC="${BASE_EDGE_DIR}/${f}"
+    DST="${LOGSTASH_ETC}/${f}"
+    if [[ -f "$SRC" ]]; then
+      [[ -f "$DST" ]] && cp -a "$DST" "${DST}.${TS}.bak"
       install -m 0644 "$SRC" "$DST"
-      log "${f} -> ${DST}"
+      log "Erstinstallation: ${f} -> ${DST}"
       LS_CHANGED=true
+    else
+      warn "Fehlt im Repo: ${SRC}"
     fi
-  else
-    warn "Fehlt im Repo: ${SRC}"
-  fi
-done
-
+  done
+else
+  log "Marker gefunden (${EDGE_MARKER}) – Config-Overrides werden übersprungen."
+fi
 
 # ---------- Rechte auf Pipelines setzen ----------
 log "Setze Rechte für Pipelines…"
@@ -185,6 +180,11 @@ find "$LS_PIPELINES_ROOT" -type f -name '*.conf' -exec chmod 640 {} \; 2>/dev/nu
 # ---------- Logstash nur bei Änderung neu starten ----------
 if [[ "$LS_CHANGED" == true ]]; then
   systemctl restart logstash || warn "logstash Neustart fehlgeschlagen – prüfen!"
+  # Marker setzen NACH erfolgreicher Erstinstallation
+  if [[ ! -f "$EDGE_MARKER" ]]; then
+    echo "edge bootstrap: $(date -Is)" > "$EDGE_MARKER"
+    chmod 644 "$EDGE_MARKER"
+  fi
 else
   log "Keine Änderungen an Pipelines/Configs – kein Neustart von logstash."
 fi
@@ -222,3 +222,4 @@ log "Done. Quick-Checks:"
 echo "  - cat $WG_CONF"
 echo "  - systemctl status logstash --no-pager"
 echo "  - ls -1 $LS_PIPELINES_DIR"
+echo "  - test -f $EDGE_MARKER && echo 'Marker vorhanden: '$EDGE_MARKER"
