@@ -1,15 +1,10 @@
 #!/usr/bin/env bash
 # edge_install.sh – Edge-Appliance Bootstrapper (Ubuntu/Debian)
-# - /tmp/wg_env.env auto anlegen (falls fehlt) => dann beenden
-# - WireGuard + wireguard-tools installieren, Forwarding aktivieren
-# - Keys generieren/übernehmen; PubKey am Ende IMMER anzeigen
-# - Snaps entfernen
-# - Logstash via Elastic APT installieren
-# - Pipelines:   logstash/edge/pipelines/*.conf -> /etc/logstash/pipelines/forwarder/
-#   * Idempotent: existieren bereits .conf-Dateien in forwarder/, wird NICHT überschrieben
-# - Configs:     logstash/edge/{jvm.options,logstash.yml,pipelines.yml} -> /etc/logstash/ (überschreiben)
-# - Rechte auf Pipelines setzen (Gruppe logstash, d=750, *.conf=640)
-# - wg0.conf immer schreiben (Peer-PubKey Platzhalter)
+# Idempotent:
+# - Pipelines (*.conf) nur beim ersten Lauf (wenn forwarder/ leer)
+# - Logstash-Configs nur, wenn nicht vorhanden (kein Überschreiben)
+# - Logstash-Neustart nur bei Änderungen
+# - Elastic-GPG-Key wird immer ohne Nachfrage ersetzt
 
 set -Eeuo pipefail
 
@@ -124,6 +119,8 @@ apt-get autoremove --purge -y || true
 # ---------- Logstash (Elastic APT) ----------
 log "Installiere Logstash (Elastic APT)…"
 install -d -m 0755 /usr/share/keyrings
+# Key immer ohne Nachfrage überschreiben
+rm -f /usr/share/keyrings/elastic.gpg
 curl -fsSL https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --dearmor -o /usr/share/keyrings/elastic.gpg
 cat >/etc/apt/sources.list.d/elastic-8.x.list <<'EOF'
 deb [signed-by=/usr/share/keyrings/elastic.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main
@@ -139,6 +136,9 @@ git clone -q --depth 1 --branch "$GIT_BRANCH" \
   "${GIT_HOST}/${GIT_USER}/${GIT_REPO}.git" "$REPO_CLONE_DIR"
 BASE_EDGE_DIR="${REPO_CLONE_DIR}/logstash/edge"
 
+# Flag, ob wir Logstash neu starten müssen
+LS_CHANGED=false
+
 # ---------- Pipelines idempotent deployen ----------
 install -d -m 0755 "$LS_PIPELINES_DIR"
 if compgen -G "${LS_PIPELINES_DIR}/*.conf" >/dev/null; then
@@ -148,19 +148,24 @@ else
     rsync -a --delete --include='*/' --include='*.conf' --exclude='*' \
       "${BASE_EDGE_DIR}/pipelines/" "$LS_PIPELINES_DIR/"
     log "Pipelines -> ${LS_PIPELINES_DIR}"
+    LS_CHANGED=true
   else
     warn "Quellverzeichnis fehlt: ${BASE_EDGE_DIR}/pipelines – keine Pipelines kopiert."
   fi
 fi
 
-# ---------- Configs (immer überschreiben, mit Backup) ----------
+# ---------- Configs (nur wenn NICHT vorhanden) ----------
 for f in jvm.options logstash.yml pipelines.yml; do
   SRC="${BASE_EDGE_DIR}/${f}"
   DST="${LOGSTASH_ETC}/${f}"
   if [[ -f "$SRC" ]]; then
-    [[ -f "$DST" ]] && cp -a "$DST" "${DST}.${TS}.bak"
-    install -m 0644 "$SRC" "$DST"
-    log "$f -> ${DST}"
+    if [[ -f "$DST" ]]; then
+      log "Überspringe ${f} – Ziel existiert bereits (${DST})."
+    else
+      install -m 0644 "$SRC" "$DST"
+      log "${f} -> ${DST}"
+      LS_CHANGED=true
+    fi
   else
     warn "Fehlt im Repo: ${SRC}"
   fi
@@ -172,10 +177,14 @@ chgrp -R logstash "$LS_PIPELINES_ROOT" 2>/dev/null || true
 find "$LS_PIPELINES_ROOT" -type d -exec chmod 750 {} \; 2>/dev/null || true
 find "$LS_PIPELINES_ROOT" -type f -name '*.conf' -exec chmod 640 {} \; 2>/dev/null || true
 
-# ---------- Logstash neu starten (nur falls was kopiert/konfiguriert) ----------
-systemctl restart logstash || warn "logstash Neustart fehlgeschlagen – prüfen!"
+# ---------- Logstash nur bei Änderung neu starten ----------
+if [[ "$LS_CHANGED" == true ]]; then
+  systemctl restart logstash || warn "logstash Neustart fehlgeschlagen – prüfen!"
+else
+  log "Keine Änderungen an Pipelines/Configs – kein Neustart von logstash."
+fi
 
-# ---------- wg0.conf schreiben ----------
+# ---------- wg0.conf schreiben (immer) ----------
 log "Schreibe ${WG_CONF}…"
 cat >"$WG_CONF" <<EOF
 [Interface]
