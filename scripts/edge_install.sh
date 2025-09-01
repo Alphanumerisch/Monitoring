@@ -52,7 +52,7 @@ else
   for P in \
     "edge/wg_env.env" \
     "wg_env.env" \
-    "logstash/Edge/wg_env.env" \
+    "wireguard/Edge/wg_env.env" \
     "Edge/wg_env.env"
   do
     if curl -fsSL "${RAW_BASE}/${P}" -o "$ENV_PATH"; then
@@ -242,3 +242,4 @@ fi
 log "Fertig."
 log "ENV-Datei: $ENV_PATH"
 log "WG Keys:   $WG_PRIV_FILE (priv), $WG_PUB_FILE (pub)"
+
