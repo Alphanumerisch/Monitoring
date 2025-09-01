@@ -40,27 +40,22 @@ TS="$(date +%F_%H%M%S)"
 mkdir -p "$WORKDIR"
 
 # ------------ Schritt 1 / 2 / 3: wg_env.env prüfen/holen ------------
-if [[ -f "$ENV_PATH" ]]; then
-  log "Gefunden: $ENV_PATH"
-else
-  warn "$ENV_PATH nicht gefunden. Versuche Download aus Git…"
-  mkdir -p "$WORKDIR"
-  cd "$WORKDIR"
+if [[ ! -f "$ENV_PATH" ]]; then
+  warn "$ENV_PATH existiert nicht – lege neue Datei an."
+  cat >"$ENV_PATH" <<EOF
+# WireGuard Environment Variablen
+# WG_PRIV_KEY wird automatisch generiert oder manuell eingetragen
+WG_PRIV_KEY=CHANGE_ME
 
-  # 1) Versuche Raw-Pfade (häufige Varianten)
-  GOT=""
-  for P in \
-    "edge/wg_env.env" \
-    "wg_env.env" \
-    "wireguard/Edge/wg_env.env" \
-    "Edge/wg_env.env"
-  do
-    if curl -fsSL "${RAW_BASE}/${P}" -o "$ENV_PATH"; then
-      log "wg_env.env via raw: ${P}"
-      GOT="yes"
-      break
-    fi
-  done
+# IP-Adresse für dieses Edge-Gerät
+# Beispiel: 10.0.100.4/32
+WG_INTERFACE_IP=CHANGE_ME
+EOF
+  chmod 600 "$ENV_PATH"
+  warn "Bitte $ENV_PATH bearbeiten (PrivKey/IP eintragen)."
+  warn "Script beendet sich jetzt."
+  exit 0
+fi
 
   # 2) Fallback: Git-Clone und suchen
   if [[ -z "${GOT}" ]]; then
@@ -242,4 +237,5 @@ fi
 log "Fertig."
 log "ENV-Datei: $ENV_PATH"
 log "WG Keys:   $WG_PRIV_FILE (priv), $WG_PUB_FILE (pub)"
+
 
