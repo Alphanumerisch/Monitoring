@@ -68,10 +68,15 @@ $SUDO sysctl --system >/dev/null
 
 # ---------- Elastic GPG-Key + APT-Repo für Logstash ----------
 info "Importiere Elastic/Logstash GPG-Key & APT-Repo…"
-$SUDO install -d -m 0755 /usr/share/keyrings
+$SUDO rm -f /etc/apt/sources.list.d/elastic-8.x.list  # evtl. alte defekte Quelle
+$SUDO install -d -m 0755 /etc/apt/keyrings
+
 curl -fsSL https://artifacts.elastic.co/GPG-KEY-elasticsearch \
-  | $SUDO gpg --dearmor -o /usr/share/keyrings/elastic.gpg
-echo 'deb [signed-by=/usr/share/keyrings/elastic.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main' \
+  | $SUDO gpg --dearmor -o /etc/apt/keyrings/elastic.gpg
+
+$SUDO chmod 0644 /etc/apt/keyrings/elastic.gpg
+
+echo 'deb [signed-by=/etc/apt/keyrings/elastic.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main' \
   | $SUDO tee /etc/apt/sources.list.d/elastic-8.x.list >/dev/null
 
 # ---------- Logstash installieren ----------
@@ -205,3 +210,4 @@ echo "  sudo systemctl status logstash"
 echo
 echo "Public Key dieses Edge (falls erzeugt):"
 [[ -f /etc/wireguard/publickey ]] && cat /etc/wireguard/publickey || echo "(kein publickey erzeugt – siehe $EDGE_ENV)"
+
