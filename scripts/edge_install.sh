@@ -1,214 +1,244 @@
-ge#!/usr/bin/env bash
-# Edge-Setup: WireGuard + Logstash + Git-Pipelines
-# Achtung: Datei mit LF-Zeilenenden speichern (nicht CRLF)!
-set -euo pipefail
+#!/usr/bin/env bash
+# edge_setup.sh – Edge-Appliance Bootstrapper
+# Anforderung: root-Rechte, Ubuntu/Debian
+# Autor: Meisters Helfer :)
 
-# ---------- kleine Helfer ----------
-info(){ echo -e "\e[36mℹ\e[0m $*"; }
-ok(){   echo -e "\e[32m✔\e[0m $*"; }
-warn(){ echo -e "\e[33m!\e[0m $*"; }
-fail(){ echo -e "\e[31m✖\e[0m $*"; exit 1; }
+set -Eeuo pipefail
 
-# ---------- Parameter / Defaults (per ENV überschreibbar) ----------
-GIT_URL="${GIT_URL:-https://github.com/alphanumerisch/monitoring.git}"                 # z.B. https://git.example.tld/org/repo.git
-GIT_BRANCH="${GIT_BRANCH:-dev}"
-GIT_USER="${GIT_USER:-alphanumerisch}"               # alphanumerisch, falls https-Auth nötig
-GIT_TOKEN="${GIT_TOKEN:-}"             # optionales Token/Passwort für https
+# ------------ Hilfsfunktionen ------------
+log()  { printf "\033[32m[+] %s\033[0m\n" "$*"; }
+warn() { printf "\033[33m[!] %s\033[0m\n" "$*"; }
+err()  { printf "\033[31m[-] %s\033[0m\n" "$*"; }
+trap 'err "Fehler in Zeile $LINENO. Abbruch."' ERR
 
-REPO_DIR="${REPO_DIR:-/opt/elk/repo}"
-LS_PIPELINE_DIR="${LS_PIPELINE_DIR:-/etc/logstash/pipeline/forwarder}"
-LS_ETC_DIR="/etc/logstash"
-
-# Aus Repo zu holende Dateien/Ordner (Case-Sensitive wie im Repo!)
-REPO_EDGE_PIPELINES_PATH="${REPO_EDGE_PIPELINES_PATH:-logstash/edge/Pipelines}"
-REPO_LOGSTASH_YML_PATH="${REPO_LOGSTASH_YML_PATH:-logstash/edge/logstash.yml}"
-REPO_PIPELINES_YML_PATH="${REPO_PIPELINES_YML_PATH:-logstash/edge/pipelines.yml}"
-
-# WireGuard
-EDGE_ENV="${EDGE_ENV:-/etc/wireguard/edge.env}"
-WG_CONF="${WG_CONF:-/etc/wireguard/wg0.conf}"
-WG_IFACE="${WG_IFACE:-wg0}"
-
-# ---------- Root / sudo ----------
-if [[ $EUID -ne 0 ]]; then
-  SUDO="sudo"
-else
-  SUDO=""
+# ------------ Root-Check ------------
+if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
+  err "Bitte als root ausführen."
+  exit 1
 fi
 
-# ---------- Vorbereitungen ----------
-$SUDO apt-get update -y
-$SUDO apt-get install -y curl ca-certificates git jq qrencode
+# ------------ Git/Repo-Parameter ------------
+GIT_HOST="https://github.com"
+GIT_USER="alphanumerisch"
+GIT_REPO="monitoring"
+GIT_BRANCH="dev"
+RAW_BASE="https://raw.githubusercontent.com/${GIT_USER}/${GIT_REPO}/${GIT_BRANCH}"
 
-# ---------- Snaps entfernen ----------
-info "Entferne Snaps (falls vorhanden)…"
-set +e
-$SUDO snap remove --purge lxd 2>/dev/null
-$SUDO snap remove --purge core20 2>/dev/null
-$SUDO snap remove --purge core22 2>/dev/null
-$SUDO snap remove --purge snapd 2>/dev/null
-set -e
-$SUDO apt-get purge -y snapd || true
-$SUDO apt-get autoremove --purge -y || true
+# ------------ Pfade/Variablen ------------
+ENV_PATH="/tmp/wg_env.env"              # gemäß Vorgabe
+WG_DIR="/etc/wireguard"
+WG_CONF="${WG_DIR}/wg0.conf"
+WG_PRIV_FILE="${WG_DIR}/privatekey"
+WG_PUB_FILE="${WG_DIR}/publickey"
 
-# ---------- Basis-Hardening / System ----------
-info "Setze Zeitsync & deaktiviere unnötige Dienste…"
-$SUDO systemctl disable --now motd-news.service motd-news.timer 2>/dev/null || true
-$SUDO systemctl disable --now cloud-init.service 2>/dev/null || true
-$SUDO timedatectl set-timezone Europe/Berlin || true
-$SUDO systemctl enable --now systemd-timesyncd || true
+LOGSTASH_ETC="/etc/logstash"
+LS_PIPELINES_DIR="${LOGSTASH_ETC}/pipelines/forwarder"
+WORKDIR="/tmp/edge-setup"
+REPO_CLONE_DIR="${WORKDIR}/${GIT_REPO}"
+TS="$(date +%F_%H%M%S)"
 
-# ---------- WireGuard installieren & IP-Forwarding ----------
-info "Installiere WireGuard…"
-$SUDO apt-get install -y wireguard
-info "Aktiviere IP-Forwarding…"
-echo 'net.ipv4.ip_forward=1' | $SUDO tee /etc/sysctl.d/99-wg.conf >/dev/null
-echo 'net.ipv6.conf.all.forwarding=1' | $SUDO tee -a /etc/sysctl.d/99-wg.conf >/dev/null
-$SUDO sysctl --system >/dev/null
+mkdir -p "$WORKDIR"
 
-# ---------- Elastic GPG-Key + APT-Repo für Logstash ----------
-info "Importiere Elastic/Logstash GPG-Key & APT-Repo…"
-$SUDO rm -f /etc/apt/sources.list.d/elastic-8.x.list  # evtl. alte defekte Quelle
-$SUDO install -d -m 0755 /etc/apt/keyrings
-
-curl -fsSL https://artifacts.elastic.co/GPG-KEY-elasticsearch \
-  | $SUDO gpg --dearmor -o /etc/apt/keyrings/elastic.gpg
-
-$SUDO chmod 0644 /etc/apt/keyrings/elastic.gpg
-
-echo 'deb [signed-by=/etc/apt/keyrings/elastic.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main' \
-  | $SUDO tee /etc/apt/sources.list.d/elastic-8.x.list >/dev/null
-
-# ---------- Logstash installieren ----------
-$SUDO apt-get update -y
-info "Installiere Logstash…"
-$SUDO apt-get install -y logstash
-$SUDO systemctl enable logstash
-
-# ---------- Git-Repo klonen/aktualisieren ----------
-if [[ -z "$GIT_URL" ]]; then
-  fail "GIT_URL ist leer. Bitte GIT_URL (und ggf. GIT_USER/GIT_TOKEN) als ENV setzen."
-fi
-
-info "Hole Repo: $GIT_URL (Branch: $GIT_BRANCH)…"
-$SUDO install -d -m 0755 "$(dirname "$REPO_DIR")"
-if [[ -d "$REPO_DIR/.git" ]]; then
-  (cd "$REPO_DIR" && $SUDO git fetch --all && $SUDO git checkout "$GIT_BRANCH" && $SUDO git pull --ff-only)
+# ------------ Schritt 1 / 2 / 3: wg_env.env prüfen/holen ------------
+if [[ -f "$ENV_PATH" ]]; then
+  log "Gefunden: $ENV_PATH"
 else
-  if [[ -n "$GIT_USER" && -n "$GIT_TOKEN" && "$GIT_URL" =~ ^https?:// ]]; then
-    # https mit Basic Auth
-    AUTH_URL="$(echo "$GIT_URL" | sed -E "s#https://#https://${GIT_USER}:${GIT_TOKEN}@#")"
-    $SUDO git clone --branch "$GIT_BRANCH" --depth 1 "$AUTH_URL" "$REPO_DIR"
-  else
-    $SUDO git clone --branch "$GIT_BRANCH" --depth 1 "$GIT_URL" "$REPO_DIR"
+  warn "$ENV_PATH nicht gefunden. Versuche Download aus Git…"
+  mkdir -p "$WORKDIR"
+  cd "$WORKDIR"
+
+  # 1) Versuche Raw-Pfade (häufige Varianten)
+  GOT=""
+  for P in \
+    "edge/wg_env.env" \
+    "wg_env.env" \
+    "logstash/Edge/wg_env.env" \
+    "Edge/wg_env.env"
+  do
+    if curl -fsSL "${RAW_BASE}/${P}" -o "$ENV_PATH"; then
+      log "wg_env.env via raw: ${P}"
+      GOT="yes"
+      break
+    fi
+  done
+
+  # 2) Fallback: Git-Clone und suchen
+  if [[ -z "${GOT}" ]]; then
+    warn "Raw-Download fehlgeschlagen, clone Repository…"
+    rm -rf "$REPO_CLONE_DIR" || true
+    git clone --depth 1 --branch "$GIT_BRANCH" \
+      "${GIT_HOST}/${GIT_USER}/${GIT_REPO}.git" "$REPO_CLONE_DIR"
+    FOUND="$(find "$REPO_CLONE_DIR" -maxdepth 4 -type f -name wg_env.env | head -n1 || true)"
+    if [[ -n "${FOUND}" ]]; then
+      cp -f "$FOUND" "$ENV_PATH"
+      log "wg_env.env aus Repo: $FOUND -> $ENV_PATH"
+    fi
   fi
+
+  if [[ ! -s "$ENV_PATH" ]]; then
+    err "Konnte wg_env.env nicht beziehen."
+    exit 2
+  fi
+
+  warn "Bitte $ENV_PATH editieren (WG_PRIV_KEY, WG_INTERFACE_IP). Script beendet sich jetzt."
+  exit 0
 fi
 
-# ---------- Logstash: Dateien deployen ----------
-info "Deploye Logstash-Konfiguration…"
-$SUDO install -d -m 0755 "$LS_PIPELINE_DIR"
+# ------------ env laden ------------
+set -a
+# shellcheck disable=SC1090
+. "$ENV_PATH"
+set +a
 
-# Pipelines (Edge)
-if [[ -d "$REPO_DIR/$REPO_EDGE_PIPELINES_PATH" ]]; then
-  $SUDO rsync -a --delete "$REPO_DIR/$REPO_EDGE_PIPELINES_PATH"/ "$LS_PIPELINE_DIR"/
-else
-  warn "Repo-Pfad nicht gefunden: $REPO_DIR/$REPO_EDGE_PIPELINES_PATH – überspringe Edge-Pipelines."
-fi
+WG_PRIV_KEY="${WG_PRIV_KEY:-}"
+WG_INTERFACE_IP="${WG_INTERFACE_IP:-}"
 
-# logstash.yml
-if [[ -f "$REPO_DIR/$REPO_LOGSTASH_YML_PATH" ]]; then
-  $SUDO install -m 0644 "$REPO_DIR/$REPO_LOGSTASH_YML_PATH" "$LS_ETC_DIR/logstash.yml"
-else
-  warn "Repo-Pfad nicht gefunden: $REPO_DIR/$REPO_LOGSTASH_YML_PATH – überspringe logstash.yml."
-fi
+# ------------ 1.1 WireGuard installieren & Forwarding aktivieren ------------
+log "Installiere WireGuard & Tools…"
+apt-get update -y
+DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends wireguard qrencode
 
-# pipelines.yml (vom Repo – auch wenn Dateiname 'pipelines.yml' im rz-Pfad liegt)
-if [[ -f "$REPO_DIR/$REPO_PIPELINES_YML_PATH" ]]; then
-  $SUDO install -m 0644 "$REPO_DIR/$REPO_PIPELINES_YML_PATH" "/etc/logstash/pipelines.yml"
-else
-  warn "Repo-Pfad nicht gefunden: $REPO_DIR/$REPO_PIPELINES_YML_PATH – überspringe pipelines.yml."
-fi
+log "Aktiviere IPv4/IPv6 Forwarding…"
+install -d -m 0755 /etc/sysctl.d
+{
+  echo 'net.ipv4.ip_forward=1'
+  echo 'net.ipv6.conf.all.forwarding=1'
+} | tee /etc/sysctl.d/99-wg.conf >/dev/null
+sysctl --system >/dev/null
 
-# Eigentümer setzen
-$SUDO chown -R logstash:logstash /etc/logstash
+# Schlüsselverzeichnis
+install -d -m 0700 "$WG_DIR"
 
-# ---------- WireGuard: ENV & Config rendern ----------
-info "Richte WireGuard ein…"
-$SUDO install -d -m 0700 /etc/wireguard
-if [[ -f "$EDGE_ENV" ]]; then
-  # ENV laden
-  # shellcheck disable=SC1090
-  source "$EDGE_ENV"
-else
-  info "Erzeuge Schlüssel & ENV: $EDGE_ENV"
+# Priv-/PubKey erzeugen, falls nicht vorhanden/in ENV leer
+if [[ -z "${WG_PRIV_KEY}" || "${WG_PRIV_KEY}" == "AUTO" || "${WG_PRIV_KEY}" == "GENERATE" ]]; then
+  warn "WG_PRIV_KEY leer/auto → generiere Schlüssel…"
   umask 077
-  WG_PRIV_GEN="$(wg genkey)"
-  WG_PUB_GEN="$(awk 'BEGIN{print ARGV[1]}' <<<"$WG_PRIV_GEN" | wg pubkey)" 2>/dev/null || WG_PUB_GEN=""
-  cat | $SUDO tee "$EDGE_ENV" >/dev/null <<ENV
-# WireGuard Edge-ENV (pro Gerät anpassen)
-WG_PRIVATE_KEY="$WG_PRIV_GEN"
-# Unbedingt je Edge setzen:
-WG_ADDRESS="${WG_ADDRESS:-10.0.100.XXX/32}"
-WG_LISTEN_PORT="${WG_LISTEN_PORT:-51820}"
+  wg genkey | tee "$WG_PRIV_FILE" | wg pubkey > "$WG_PUB_FILE"
+  WG_PRIV_KEY="$(cat "$WG_PRIV_FILE")"
+  chmod 600 "$WG_PRIV_FILE" "$WG_PUB_FILE"
 
-# RZ/Peer-Daten:
-WG_PEER_PUBLIC_KEY="${WG_PEER_PUBLIC_KEY:-}"
-WG_ENDPOINT="${WG_ENDPOINT:-vpn.labor-habermehl.de:51820}"
-WG_ALLOWED_IPS="${WG_ALLOWED_IPS:-10.0.100.1/32,172.16.60.1/32}"
-WG_KEEPALIVE="${WG_KEEPALIVE:-25}"
-ENV
-  $SUDO chmod 600 "$EDGE_ENV"
-  # shellcheck disable=SC1090
-  source "$EDGE_ENV"
-  [[ -n "${WG_PUB_GEN:-}" ]] && echo "$WG_PUB_GEN" | $SUDO tee /etc/wireguard/publickey >/dev/null || true
+  # WG_PRIV_KEY in env-Datei schreiben/ersetzen
+  if grep -q '^WG_PRIV_KEY=' "$ENV_PATH"; then
+    sed -i "s#^WG_PRIV_KEY=.*#WG_PRIV_KEY=${WG_PRIV_KEY}#g" "$ENV_PATH"
+  else
+    printf "\nWG_PRIV_KEY=%s\n" "$WG_PRIV_KEY" >> "$ENV_PATH"
+  fi
+  log "PrivKey in $ENV_PATH aktualisiert. PublicKey: $WG_PUB_FILE"
+else
+  # wenn KEY in ENV vorhanden → Dateien aktualisieren
+  umask 077
+  printf "%s\n" "$WG_PRIV_KEY" > "$WG_PRIV_FILE"
+  chmod 600 "$WG_PRIV_FILE"
+  printf "%s\n" "$WG_PRIV_KEY" | wg pubkey > "$WG_PUB_FILE"
+  chmod 600 "$WG_PUB_FILE"
+  log "Schlüssel aus ENV übernommen. PublicKey: $WG_PUB_FILE"
 fi
 
-# Plausibilitäts-Check
-[[ -z "${WG_PRIVATE_KEY:-}" ]] && warn "WG_PRIVATE_KEY fehlt in $EDGE_ENV"
-[[ -z "${WG_ADDRESS:-}" ]]     && warn "WG_ADDRESS (z. B. 10.0.100.4/32) fehlt in $EDGE_ENV"
-[[ -z "${WG_PEER_PUBLIC_KEY:-}" ]] && warn "WG_PEER_PUBLIC_KEY fehlt (RZ-PublicKey) – Verbindung wird nicht aufbauen."
+# IP absichern – /32 anhängen, falls vergessen
+if [[ "$WG_INTERFACE_IP" != */* ]]; then
+  WG_INTERFACE_IP="${WG_INTERFACE_IP}/32"
+fi
 
-# wg0.conf rendern
-info "Schreibe $WG_CONF (aus ENV)…"
-umask 077
-$SUDO bash -c "cat > '$WG_CONF' <<WG
+# ------------ 1.2 Snaps entfernen (idempotent) ------------
+warn "Entferne Snaps (falls vorhanden)…"
+snap remove --purge lxd 2>/dev/null || true
+snap remove --purge "core*" 2>/dev/null || true
+apt-get purge -y snapd || true
+apt-get autoremove --purge -y || true
+
+# ------------ 1.3 Logstash (Elastic APT) installieren ------------
+log "Installiere Logstash (Elastic APT)…"
+apt-get update -y
+DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends curl ca-certificates gnupg
+
+install -d -m 0755 /usr/share/keyrings
+curl -fsSL https://artifacts.elastic.co/GPG-KEY-elasticsearch \
+  | gpg --dearmor -o /usr/share/keyrings/elastic.gpg
+
+# Repo-Datei (immer neu schreiben – robust gegen Altlasten)
+cat >/etc/apt/sources.list.d/elastic-8.x.list <<'EOF'
+deb [signed-by=/usr/share/keyrings/elastic.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main
+EOF
+
+apt-get update -y
+DEBIAN_FRONTEND=noninteractive apt-get install -y logstash
+systemctl enable --now logstash
+
+# ------------ Pipelines & Configs aus Git ziehen ------------
+log "Hole Logstash-Konfigurationen aus Git…"
+# Repo holen/aktualisieren
+if [[ -d "$REPO_CLONE_DIR/.git" ]]; then
+  git -C "$REPO_CLONE_DIR" fetch origin "$GIT_BRANCH" --depth 1
+  git -C "$REPO_CLONE_DIR" checkout -f "origin/${GIT_BRANCH}"
+else
+  rm -rf "$REPO_CLONE_DIR" || true
+  git clone --depth 1 --branch "$GIT_BRANCH" \
+    "${GIT_HOST}/${GIT_USER}/${GIT_REPO}.git" "$REPO_CLONE_DIR"
+fi
+
+# Pipelines kopieren
+SRC_PIPE_DIR="${REPO_CLONE_DIR}/logstash/Edge/Pipelines"
+install -d -m 0755 "$LS_PIPELINES_DIR"
+if [[ -d "$SRC_PIPE_DIR" ]]; then
+  rsync -a --delete "$SRC_PIPE_DIR"/ "$LS_PIPELINES_DIR"/
+  log "Pipelines nach ${LS_PIPELINES_DIR} synchronisiert."
+else
+  warn "Quellpfad für Pipelines nicht gefunden: $SRC_PIPE_DIR"
+fi
+
+# Hauptconfigs überschreiben (vorher Backup)
+for f in jvm.options logstash.yml pipelines.yml; do
+  SRC="${REPO_CLONE_DIR}/logstash/Edge/${f}"
+  DST="${LOGSTASH_ETC}/${f}"
+  if [[ -f "$SRC" ]]; then
+    if [[ -f "$DST" ]]; then
+      cp -a "$DST" "${DST}.${TS}.bak"
+    fi
+    install -m 0644 "$SRC" "$DST"
+    log "Config aktualisiert: $DST"
+  else
+    warn "Quelle fehlt: $SRC"
+  fi
+done
+
+systemctl restart logstash || warn "logstash Neustart fehlgeschlagen – prüfen!"
+
+# ------------ Basis-Hardening / Footprint ------------
+warn "Basis-Footprint anpassen…"
+systemctl disable --now motd-news.service 2>/dev/null || true
+systemctl disable --now motd-news.timer   2>/dev/null || true
+systemctl disable --now cloud-init.service 2>/dev/null || true
+
+timedatectl set-timezone Europe/Berlin
+systemctl enable --now systemd-timesyncd 2>/dev/null || true
+
+# ------------ WireGuard-Konfiguration schreiben ------------
+log "Erzeuge ${WG_CONF}…"
+cat >"$WG_CONF" <<EOF
 [Interface]
-PrivateKey = ${WG_PRIVATE_KEY:-}
-Address    = ${WG_ADDRESS:-}
-ListenPort = ${WG_LISTEN_PORT:-51820}
+PrivateKey = ${WG_PRIV_KEY}
+Address = ${WG_INTERFACE_IP}
+ListenPort = 51820
 
 [Peer]
-PublicKey  = ${WG_PEER_PUBLIC_KEY:-}
-Endpoint   = ${WG_ENDPOINT:-}
-AllowedIPs = ${WG_ALLOWED_IPS:-}
-PersistentKeepalive = ${WG_KEEPALIVE:-25}
-WG"
-$SUDO chmod 600 "$WG_CONF"
+# !!! Peer PublicKey bitte eintragen !!!
+PublicKey = CHANGE_ME_PEER_PUBLIC_KEY
+Endpoint = vpn.labor-habermehl.de:51820
+AllowedIPs = 10.0.100.1/32, 172.16.60.1/32
+PersistentKeepalive = 25
+EOF
 
-# ---------- Dienste starten ----------
-info "Starte WireGuard & Logstash…"
-set +e
-$SUDO systemctl enable --now "wg-quick@${WG_IFACE}"
-WG_RC=$?
-set -e
-if [[ $WG_RC -ne 0 ]]; then
-  warn "WireGuard konnte nicht gestartet werden. Prüfe $EDGE_ENV & $WG_CONF."
+chmod 600 "$WG_CONF"
+log "wg0.conf geschrieben. Eigener PublicKey: $(cat "$WG_PUB_FILE")"
+warn "Bitte den Peer-PublicKey in ${WG_CONF} ersetzen (CHANGE_ME_PEER_PUBLIC_KEY)."
+
+# Sicherheitshalber NICHT starten, solange Peer-Key Platzhalter ist
+if grep -q 'CHANGE_ME_PEER_PUBLIC_KEY' "$WG_CONF"; then
+  warn "WG nicht gestartet, da Peer-Key fehlt. Start später mit: systemctl enable --now wg-quick@wg0"
 else
-  ok "WireGuard aktiv."
+  systemctl enable --now wg-quick@wg0
 fi
 
-$SUDO systemctl restart logstash
-$SUDO systemctl enable logstash
-ok "Logstash aktiv."
-
-# ---------- Statushinweise ----------
-echo
-ok "Fertig. Nützliche Checks:"
-echo "  sudo wg show"
-echo "  sudo systemctl status wg-quick@${WG_IFACE}"
-echo "  sudo systemctl status logstash"
-echo
-echo "Public Key dieses Edge (falls erzeugt):"
-[[ -f /etc/wireguard/publickey ]] && cat /etc/wireguard/publickey || echo "(kein publickey erzeugt – siehe $EDGE_ENV)"
-
-
+log "Fertig."
+log "ENV-Datei: $ENV_PATH"
+log "WG Keys:   $WG_PRIV_FILE (priv), $WG_PUB_FILE (pub)"
