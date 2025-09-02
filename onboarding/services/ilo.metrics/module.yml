@@ -1,0 +1,11 @@
+service: ilo.metrics
+index_pattern: "metrics-<kunde>-ilo-*"
+write_alias: "metrics-<kunde>-ilo-write"
+ilm_policy: "ilo-metrics-7dhot-180dwarm-del180"
+settings_component: "ct-ilo-metrics-settings-v1"
+components:
+- ct-common-settings
+- ct-ecs-common
+- ct-ilo-metrics-mapping
+- ct-ilo-metrics-settings-v1
+priority: 600
