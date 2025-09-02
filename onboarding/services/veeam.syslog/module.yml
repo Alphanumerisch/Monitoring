@@ -1,0 +1,11 @@
+service: veeam.syslog
+index_pattern: "logs-<kunde>-veeam-syslog-*"
+write_alias: "logs-<kunde>-veeam-syslog-write"
+ilm_policy: "veeam-syslog-7dhot-90dwarm-del365"
+settings_component: "ct-veeam-syslog-settings-v1"
+components:
+- ct-common-settings
+- ct-ecs-common
+- ct-veeam-syslog-mapping
+- ct-veeam-syslog-settings-v1
+priority: 500
