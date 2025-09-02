@@ -1,0 +1,11 @@
+{
+"index_patterns": ["metrics-<kunde>-ilo-*"] ,
+"template": {
+"settings": {
+"index": { "lifecycle": { "name": "<policy>" } }
+}
+},
+"composed_of": ["ct-common-settings","ct-ecs-common","ct-ilo-metrics-mapping","ct-ilo-metrics-settings-v1"],
+"priority": 600,
+"_meta": {"description": "Index Template for iLO Metrics (Temps)"}
+}
