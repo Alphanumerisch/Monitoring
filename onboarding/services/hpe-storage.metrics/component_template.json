@@ -1,65 +1,187 @@
 {
-    "template": {
-      "mappings": {
-        "properties": {
-          "hpe": {
-            "properties": {
-              "ctrl": {
-                "properties": {
-                  "slot":       { "type": "keyword" },
-                  "model":      { "type": "keyword" },
-                  "firmware":   { "type": "keyword" },
-                  "status":     { "type": "keyword" },
-                  "cache": {
-                    "properties": {
-                      "status":   { "type": "keyword" },
-                      "write_policy": { "type": "keyword" }
-                    }
-                  },
-                  "battery": {
-                    "properties": {
-                      "status":   { "type": "keyword" }
-                    }
+  "template": {
+    "mappings": {
+      "properties": {
+        "hpe": {
+          "properties": {
+            "ctrl": {
+              "properties": {
+                "slot": { "type": "keyword" },
+                "model": { "type": "keyword" },
+                "status": { "type": "keyword" },
+                "firmware": { "type": "keyword" },
+                "bus_interface": { "type": "keyword" },
+                "serial_number": { "type": "keyword" },
+                "cache_serial_number": { "type": "keyword" },
+                "hardware_revision": { "type": "keyword" },
+                "firmware_online_activation_supported": { "type": "boolean" },
+                "rebuild_priority": { "type": "keyword" },
+                "expand_priority": { "type": "keyword" },
+                "surface_scan_delay_secs": { "type": "long" },
+                "surface_scan_mode": { "type": "keyword" },
+                "parallel_surface_scan_supported": { "type": "boolean" },
+                "parallel_surface_scan_current": { "type": "long" },
+                "parallel_surface_scan_max": { "type": "long" },
+                "queue_depth": { "type": "keyword" },
+                "monitor_performance_delay_min": { "type": "long" },
+                "elevator_sort_enabled": { "type": "boolean" },
+                "degraded_performance_optimization_enabled": { "type": "boolean" },
+                "inconsistency_repair_policy_enabled": { "type": "boolean" },
+                "wait_for_cache_room_enabled": { "type": "boolean" },
+                "surface_analysis_inconsistency_notification_enabled": { "type": "boolean" },
+                "post_prompt_timeout_secs": { "type": "long" },
+                "cache_board_present": { "type": "boolean" },
+                "drive_write_cache_enabled": { "type": "boolean" },
+                "total_cache_size_gb": { "type": "float" },
+                "total_cache_memory_available_gb": { "type": "float" },
+                "no_battery_write_cache_enabled": { "type": "boolean" },
+                "ssd_caching_raid5_writeback_enabled": { "type": "boolean" },
+                "ssd_caching_version": { "type": "long" },
+                "cache_backup_power_source": { "type": "keyword" },
+                "sata_ncq_supported": { "type": "boolean" },
+                "spare_activation_mode": { "type": "keyword" },
+                "temperature_c": { "type": "long" },
+                "cache_module_temperature_c": { "type": "long" },
+                "ports": {
+                  "properties": {
+                    "count": { "type": "long" },
+                    "description": { "type": "keyword" }
                   }
-                }
-              },
-              "ld": {
-                "properties": {
-                  "number":            { "type": "long" },
-                  "raid_level":        { "type": "keyword" },
-                  "size_bytes":        { "type": "long" },
-                  "status":            { "type": "keyword" },
-                  "stripe_size_bytes": { "type": "long" }
-                }
-              },
-              "pd": {
-                "properties": {
-                  "bay":                 { "type": "keyword" },     
-                  "port":                { "type": "keyword" },     
-                  "box":                 { "type": "keyword" },     
-                  "bay_number":          { "type": "long" },       
-                  "interface":           { "type": "keyword" },    
-                  "size_bytes":          { "type": "long" },
-                  "status":              { "type": "keyword" },     
-                  "temperature_c":       { "type": "long" },
-                  "temperature_max_c":   { "type": "long" },
-                  "model":               { "type": "keyword" },
-                  "serial":              { "type": "keyword" },
-                  "firmware":            { "type": "keyword" },
-                  "wwid":                { "type": "keyword" },
-                  "media_error_count":   { "type": "long" },
-                  "recoverable_error_count": { "type": "long" },
-                  "ssd_wear_percent":    { "type": "long" }
+                },
+                "encryption": { "type": "keyword" },
+                "express_local_encryption": { "type": "boolean" },
+                "driver": {
+                  "properties": {
+                    "name": { "type": "keyword" },
+                    "version": { "type": "keyword" }
+                  }
+                },
+                "pci": {
+                  "properties": {
+                    "address": { "type": "keyword" }
+                  }
+                },
+                "pcie_negotiated_data_rate": { "type": "keyword" },
+                "mode": { "type": "keyword" },
+                "pending_mode": { "type": "keyword" },
+                "port_max_phy_rate_limiting_supported": { "type": "boolean" },
+                "latency_scheduler_setting": { "type": "keyword" },
+                "power_mode": { "type": "keyword" },
+                "survival_mode_enabled": { "type": "boolean" },
+                "host_serial_number": { "type": "keyword" },
+                "sanitize_erase_supported": { "type": "boolean" },
+                "primary_boot_volume": { "type": "keyword" },
+                "secondary_boot_volume": { "type": "keyword" },
+                "cache": {
+                  "properties": {
+                    "status": { "type": "keyword" },
+                    "write_policy": { "type": "keyword" }
+                  }
+                },
+                "battery": {
+                  "properties": {
+                    "count": { "type": "long" },
+                    "status": { "type": "keyword" }
+                  }
+                },
+                "raid6_status": { "type": "keyword" }
+              }
+            },
+            "ld": {
+              "properties": {
+                "number": { "type": "long" },
+                "size_bytes": { "type": "long" },
+                "status": { "type": "keyword" },
+                "raid_level": { "type": "keyword" },
+                "fault_tolerance": { "type": "keyword" },
+                "heads": { "type": "long" },
+                "sectors_per_track": { "type": "long" },
+                "cylinders": { "type": "long" },
+                "stripe_size_bytes": { "type": "long" },
+                "full_stripe_size_bytes": { "type": "long" },
+                "unrecoverable_media_errors": { "type": "keyword" },
+                "multidomain_status": { "type": "keyword" },
+                "caching": { "type": "keyword" },
+                "unique_identifier": { "type": "keyword" },
+                "disk_name": { "type": "keyword" },
+                "mount_points": { "type": "keyword" },
+                "partition_info": { "type": "keyword" },
+                "label": { "type": "keyword" },
+                "mirror_group1": { "type": "keyword" },
+                "mirror_group2": { "type": "keyword" },
+                "drive_type": { "type": "keyword" },
+                "acceleration_method": { "type": "keyword" }
+              }
+            },
+            "pd": {
+              "properties": {
+                "bay": { "type": "keyword" },
+                "port": { "type": "keyword" },
+                "box": { "type": "keyword" },
+                "bay_number": { "type": "long" },
+                "drive_type": { "type": "keyword" },
+                "role": { "type": "keyword" },
+                "interface": { "type": "keyword" },
+                "size_bytes": { "type": "long" },
+                "status": { "type": "keyword" },
+                "temperature_c": { "type": "long" },
+                "temperature_max_c": { "type": "long" },
+                "model": { "type": "keyword" },
+                "serial": { "type": "keyword" },
+                "firmware": { "type": "keyword" },
+                "wwid": { "type": "keyword" },
+                "media_error_count": { "type": "long" },
+                "recoverable_error_count": { "type": "long" },
+                "ssd_wear_percent": { "type": "long" },
+                "exposed_to_os": { "type": "boolean" },
+                "logical_block_size_bytes": { "type": "long" },
+                "physical_block_size_bytes": { "type": "long" },
+                "ssd_smart_trip_wearout": { "type": "keyword" },
+                "phy": {
+                  "properties": {
+                    "count": { "type": "long" },
+                    "transfer_rate": { "type": "keyword" },
+                    "physical_link_rate": { "type": "keyword" },
+                    "maximum_link_rate": { "type": "keyword" }
+                  }
+                },
+                "auth": {
+                  "properties": {
+                    "status": { "type": "keyword" }
+                  }
+                },
+                "carrier": {
+                  "properties": {
+                    "app_version": { "type": "keyword" },
+                    "bootloader_version": { "type": "keyword" }
+                  }
+                },
+                "sanitize": {
+                  "properties": {
+                    "erase_supported": { "type": "boolean" },
+                    "unrestricted_supported": { "type": "boolean" }
+                  }
+                },
+                "smr": {
+                  "properties": {
+                    "support": { "type": "keyword" }
+                  }
+                },
+                "sata_ncq": {
+                  "properties": {
+                    "capable": { "type": "boolean" },
+                    "enabled": { "type": "boolean" }
+                  }
                 }
               }
             }
           }
         }
       }
-    },
-    "_meta": {
-      "description": "HPE Smart Array (Controller/LD/PD) service-specific fields for metrics-<kunde>-hpe-storage-*",
-      "version": 1
     }
+  },
+  "_meta": {
+    "description": "HPE Smart Array (Controller/LD/PD) service-specific fields for metrics-<kunde>-hpe-storage-*",
+    "version": 3
   }
-  
+}
