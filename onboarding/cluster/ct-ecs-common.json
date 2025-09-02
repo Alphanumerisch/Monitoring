@@ -1,0 +1,28 @@
+{
+"template": {
+"mappings": {
+"properties": {
+"@timestamp": { "type": "date" },
+"event": { "properties": {
+"start": {"type":"date"},
+"end": {"type":"date"},
+"ingested": {"type":"date"},
+"duration": {"type":"long"},
+"category": {"type":"keyword"},
+"dataset": {"type":"keyword"},
+"outcome": {"type":"keyword"},
+"kind": {"type":"keyword"},
+"type": {"type":"keyword"}
+}},
+"host": {"properties": {"name": {"type":"keyword"}, "ip": {"type":"ip"}}},
+"source": {"properties": {"ip": {"type":"ip"}}},
+"observer": {"properties": {"hostname": {"type":"keyword"}, "vendor": {"type":"keyword"}, "product": {"type":"keyword"}, "version": {"type":"keyword"}}},
+"service": {"properties": {"name": {"type":"keyword"}, "type": {"type":"keyword"}}},
+"labels": {"properties": {"kunde": {"type":"keyword"}}},
+"ecs": {"properties": {"version": {"type":"keyword"}}},
+"tags": {"type":"keyword"}
+}
+}
+},
+"_meta": { "description": "ECS minimal common mapping", "version": 1 }
+}
