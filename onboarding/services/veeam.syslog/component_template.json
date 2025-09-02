@@ -1,0 +1,14 @@
+{
+"template": {
+"mappings": {
+"properties": {
+"veeam": {
+"properties": {
+"job": {"properties": {"name": {"type":"keyword"}}}
+}
+}
+}
+}
+},
+"_meta": {"description": "Veeam syslog mapping", "version": 1}
+}
