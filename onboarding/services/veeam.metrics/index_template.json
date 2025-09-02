@@ -1,0 +1,11 @@
+{
+"index_patterns": ["metrics-<kunde>-veeam-jobs-*"] ,
+"template": {
+"settings": {
+"index": { "lifecycle": { "name": "<policy>" } }
+}
+},
+"composed_of": ["ct-common-settings","ct-ecs-common","ct-veeam-metrics-mapping","ct-veeam-metrics-settings-v1"],
+"priority": 500,
+"_meta": {"description": "Index Template for Veeam Metrics (jobs)"}
+}
