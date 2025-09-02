@@ -1,0 +1,12 @@
+{
+  "template": {
+    "settings": {
+      "index": {
+        "number_of_shards": 1,
+        "number_of_replicas": 0,
+        "refresh_interval": "5s"
+      }
+    }
+  },
+  "_meta": { "description": "Service Settings for Veeam Syslog", "version": 1 }
+}
