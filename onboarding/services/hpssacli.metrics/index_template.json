@@ -1,0 +1,13 @@
+{
+    "index_patterns": ["metrics-<kunde>-hpssacli-*"] ,
+    "template": {
+    "settings": {
+    "index": { "lifecycle": { "name": "<policy>" } }
+    }
+    },
+    "composed_of": ["ct-common-settings","ct-ecs-common","ct-hpssacli-metrics-mapping","ct-hpssacli-metrics-settings-v1"],
+    "priority": 600,
+    "_meta": {"description": "Index Template for iLO Metrics (Temps)"}
+    }
+    
+    
