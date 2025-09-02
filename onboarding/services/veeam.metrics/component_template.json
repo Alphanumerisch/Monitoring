@@ -1,0 +1,16 @@
+{
+"template": {
+"mappings": {
+"properties": {
+"veeam": {
+"properties": {
+"job": {"properties": {"name": {"type":"keyword"}}},
+"next_run": {"type":"date"},
+"ingest_latency_ms": {"type":"long"}
+}
+}
+}
+}
+},
+"_meta": {"description": "Veeam metrics mapping", "version": 1}
+}
