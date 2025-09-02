@@ -1,1 +1,137 @@
+version: '3.8'
 
+services:
+
+  es-hot:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+    container_name: es-hot
+    environment:
+      - node.name=es-hot
+      - cluster.name=elk-cluster
+      - node.roles=master,data_hot,ingest,data_content,remote_cluster_client
+      - discovery.seed_hosts=es-warm
+#Nur bei ersten Cluster Start notwendig#      - cluster.initial_master_nodes=es-hot,es-warm
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=true
+      - xpack.security.transport.ssl.enabled=true
+      - xpack.security.transport.ssl.verification_mode=certificate
+      - xpack.security.transport.ssl.key=/usr/share/elasticsearch/config/certs/es-hot/es-hot.key
+      - xpack.security.transport.ssl.certificate=/usr/share/elasticsearch/config/certs/es-hot/es-hot.crt
+      - xpack.security.transport.ssl.certificate_authorities=/usr/share/elasticsearch/config/certs/ca/elastic-stack-ca.crt
+      - xpack.security.http.ssl.enabled=true
+      - xpack.security.http.ssl.key=/usr/share/elasticsearch/config/certs/es-hot/es-hot.key
+      - xpack.security.http.ssl.certificate=/usr/share/elasticsearch/config/certs/es-hot/es-hot.crt
+      - xpack.security.http.ssl.certificate_authorities=/usr/share/elasticsearch/config/certs/ca/elastic-stack-ca.crt
+      - network.host=0.0.0.0
+      - http.port=9200
+      - "ES_JAVA_OPTS=-Xms4g -Xmx4g"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - ./certs:/usr/share/elasticsearch/config/certs:ro
+      - es-hot-data:/usr/share/elasticsearch/data
+    ports:
+      - 9200:9200
+    restart: unless-stopped
+
+  es-warm:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+    container_name: es-warm
+    environment:
+      - node.name=es-warm
+      - cluster.name=elk-cluster
+      - node.roles=master,data_warm
+      - discovery.seed_hosts=es-hot
+ #Nur bei erstem Cluster Start notwendig#      - cluster-initial_master_nodes=es-hot,es-warm
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=true
+      - xpack.security.transport.ssl.enabled=true
+      - xpack.security.transport.ssl.verification_mode=certificate
+      - xpack.security.transport.ssl.key=/usr/share/elasticsearch/config/certs/es-warm/es-warm.key
+      - xpack.security.transport.ssl.certificate=/usr/share/elasticsearch/config/certs/es-warm/es-warm.crt
+      - xpack.security.transport.ssl.certificate_authorities=/usr/share/elasticsearch/config/certs/ca/elastic-stack-ca.crt
+      - xpack.security.http.ssl.enabled=true
+      - xpack.security.http.ssl.key=/usr/share/elasticsearch/config/certs/es-warm/es-warm.key
+      - xpack.security.http.ssl.certificate=/usr/share/elasticsearch/config/certs/es-warm/es-warm.crt
+      - xpack.security.http.ssl.certificate_authorities=/usr/share/elasticsearch/config/certs/ca/elastic-stack-ca.crt
+      - network.host=0.0.0.0
+      - "ES_JAVA_OPTS=-Xms4g -Xmx4g"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - ./certs:/usr/share/elasticsearch/config/certs:ro
+      - es-warm-data:/usr/share/elasticsearch/data
+    restart: unless-stopped
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.4
+    container_name: kibana
+    volumes:
+      - ./certs:/usr/share/kibana/config/certs:ro
+      - ./kibana/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
+    depends_on:
+      - es-hot
+    ports:
+      - 5601:5601
+    restart: unless-stopped
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.13.4
+    container_name: logstash
+    volumes:
+      - ./logstash/pipeline:/usr/share/logstash/pipeline
+      - ./certs:/usr/share/logstash/config/certs:ro
+      - /opt/elk/logstash/ip_customer_map.yml:/usr/share/logstash/ip_customer_map.yml:ro
+      - /opt/elk/logstash/config:/usr/share/logstash/config
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    environment:
+      - "LS_JAVA_OPTS=-Xms1g -Xmx1g"
+      - xpack.monitoring.enabled=true
+      - xpack.monitoring.elasticsearch.hosts=https://es-hot:9200
+      - xpack.monitoring.elasticsearch.username=logstash_system
+      - xpack.monitoring.elasticsearch.password=sEpkx6kTI8jO8tlZPu5r
+      - xpack.monitoring.elasticsearch.ssl.certificate_authority=/usr/share/logstash/config/certs/ca/elastic-stack-ca.crt
+      - xpack.monitoring.elasticsearch.ssl.verification_mode=none
+    depends_on:
+      - es-hot
+    ports:
+      - 5044:5044
+    restart: unless-stopped
+
+#  fleet-server:
+#    image: docker.elastic.co/beats/elastic-agent:8.13.4
+#    container_name: fleet-server
+#    restart: unless-stopped
+#    environment:
+#      - FLEET_SERVER_ENABLE=1
+#      - FLEET_SERVER_POLICY_ID=fleet-server-policy
+#      - KIBANA_FLEET_HOST=http://kibana:5601
+#      - ELASTICSEARCH_HOST=https://es-hot:9200
+#      - KIBANA_FLEET_SETUP=true
+#      - FLEET_ENROLL=1
+#      - FLEET_ENROLLMENT_TOKEN=QTk5RUg1Z0JmSVIzeTR6X3l3aFk6RDdNMGpzYjhUV2U0MmhGT3JNYWMydw==
+#      - ELASTICSEARCH_USERNAME=elastic
+#      - ELASTICSEARCH_PASSWORD=HBDEYyG7DN0QjI0eEFMn
+#      - FLEET_SERVER_CERT=/usr/share/elastic-agent/certs/fleet/fleet-server.crt
+#      - FLEET_SERVER_CERT_KEY=/usr/share/elastic-agent/certs/fleet/fleet-server.key
+#      - FLEET_CA=/usr/share/elastic-agent/certs/ca/elastic-stack-ca.crt
+#      - FLEET_URL=https://fleet-server:8220
+#      - SSL_CERT_FILE=/usr/share/elastic-agent/certs/ca/elastic-stack-ca.crt
+#    ports:
+#      - "8220:8220"
+#    volumes:
+#      - ./certs:/usr/share/elastic-agent/certs:ro
+#    depends_on:
+#      - kibana
+#      - es-hot
+
+
+
+volumes:
+  es-hot-data:
+  es-warm-data:
