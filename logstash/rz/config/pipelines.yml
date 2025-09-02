@@ -1,1 +1,10 @@
+# This file is where you define your pipelines. You can define multiple.
+# For more information on multiple pipelines, see the documentation:
+#   https://www.elastic.co/guide/en/logstash/current/multiple-pipelines.html
+
+# /etc/logstash/pipelines.yml
+- pipeline.id: rz-ingest
+  path.config: "/usr/share/logstash/pipeline/rz/*.conf"
+  pipeline.workers: 4
+  pipeline.batch.size: 200
 
