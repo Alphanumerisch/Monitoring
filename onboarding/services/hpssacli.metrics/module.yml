@@ -1,12 +1,12 @@
-service: hpssacli.metrics
-index_pattern: "metrics-<kunde>-hpssacli-*"
-write_alias: "metrics-<kunde>-hpssacli-write"
-ilm_policy: "hpssacli-metrics-7dhot-180dwarm-del180"
-settings_component: "ct-hpssacli-metrics-settings-v1"
+service: hpe-storage.metrics
+index_pattern: "metrics-<kunde>-hpe-storage-*"
+write_alias: "metrics-<kunde>-hpe-storage-write"
+ilm_policy: "hpe-storage-metrics-7dhot-180dwarm-del180"
+settings_component: "ct-hpe-storage-metrics-settings-v1"
 components:
 - ct-common-settings
 - ct-ecs-common
-- ct-hpssacli-metrics-mapping
-- ct-hpssacli-metrics-settings-v1
+- ct-hpe-storage-metrics-mapping
+- ct-hpe-storage-metrics-settings-v1
 priority: 600
 

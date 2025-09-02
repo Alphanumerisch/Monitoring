@@ -8,6 +8,6 @@
         }
       }
     },
-    "_meta": { "description": "Service Settings for iLO Metrics", "version": 1 }
+    "_meta": { "description": "Service Settings for hpe-storage Metrics", "version": 1 }
   }
   
