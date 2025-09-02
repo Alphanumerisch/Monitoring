@@ -34,13 +34,13 @@
               },
               "pd": {
                 "properties": {
-                  "bay":                 { "type": "keyword" },     // z.B. "1I:2:6"
-                  "port":                { "type": "keyword" },     // "1I"
-                  "box":                 { "type": "keyword" },     // "2"
-                  "bay_number":          { "type": "long" },        // 6
-                  "interface":           { "type": "keyword" },     // SAS/SATA 6G/12G
+                  "bay":                 { "type": "keyword" },     
+                  "port":                { "type": "keyword" },     
+                  "box":                 { "type": "keyword" },     
+                  "bay_number":          { "type": "long" },       
+                  "interface":           { "type": "keyword" },    
                   "size_bytes":          { "type": "long" },
-                  "status":              { "type": "keyword" },     // OK/Spare/Predictive Failure/Failed
+                  "status":              { "type": "keyword" },     
                   "temperature_c":       { "type": "long" },
                   "temperature_max_c":   { "type": "long" },
                   "model":               { "type": "keyword" },
