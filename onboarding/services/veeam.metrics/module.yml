@@ -9,3 +9,4 @@ components:
 - ct-veeam-metrics-mapping
 - ct-veeam-metrics-settings-v1
 priority: 500
+

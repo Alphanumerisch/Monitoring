@@ -12,3 +12,4 @@ out=${out//<$k>/$v}
 done
 printf '%s' "$out"
 }
+

@@ -32,3 +32,4 @@ index_exists(){ es_get "/$1?filter_path=*"        >/dev/null 2>&1; }
 ct_exists(){    es_get "/_component_template/$1?filter_path=*" >/dev/null 2>&1; }
 it_exists(){    es_get "/_index_template/$1?filter_path=*"     >/dev/null 2>&1; }
 ilm_exists(){   es_get "/_ilm/policy/$1?filter_path=*" >/dev/null 2>&1; }
+
