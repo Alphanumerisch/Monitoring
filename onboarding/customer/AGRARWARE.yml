@@ -1,0 +1,7 @@
+customer: agrarware
+services:
+- veeam.metrics
+- veeam.syslog
+- ilo.metrics
+kibana:
+space: AGRAR
