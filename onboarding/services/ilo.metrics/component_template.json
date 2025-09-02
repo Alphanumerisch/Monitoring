@@ -1,0 +1,56 @@
+{
+  "template": {
+    "mappings": {
+      "dynamic_templates": [
+        {
+          "hpe_strings_as_keyword": {
+            "path_match": "hpe.*",
+            "match_mapping_type": "string",
+            "mapping": { "type": "keyword", "ignore_above": 256 }
+          }
+        }
+      ],
+      "properties": {
+        "metrics": {
+          "properties": {
+            "temperature": {
+              "properties": {
+                "celsius": { "type": "float" }
+              }
+            }
+          }
+        },
+        "hpe": {
+          "properties": {
+            "ilo": {
+              "properties": {
+                "sensor": {
+                  "properties": {
+                    "id":        { "type": "long" },
+                    "name":      { "type": "keyword", "ignore_above": 256 },
+                    "context":   { "type": "keyword", "ignore_above": 256 },
+                    "health":    { "type": "keyword", "ignore_above": 64 },
+                    "thresholds": {
+                      "properties": {
+                        "upper_critical": { "type": "float" },
+                        "upper_fatal":    { "type": "float" },
+                        "warning_user":   { "type": "float" },
+                        "critical_user":  { "type": "float" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "labels": {
+          "properties": {
+            "kunde": { "type": "keyword" }
+          }
+        }
+      }
+    }
+  },
+  "_meta": { "description": "HPE iLO thermal metrics mapping", "version": 1 }
+}
