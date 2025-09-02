@@ -1,0 +1,10 @@
+{
+  "_meta": { "policy_name": "veeam-metrics-7dhot-180dwarm-del180" },
+  "policy": {
+    "phases": {
+      "hot":  { "min_age": "0d",  "actions": { "rollover": { "max_age": "7d", "max_size": "20gb" }, "set_priority": { "priority": 100 } }},
+      "warm": { "min_age": "0d",  "actions": { "forcemerge": { "max_num_segments": 1 }, "set_priority": { "priority": 50 } }},
+      "delete": { "min_age": "180d", "actions": { "delete": {} } }
+    }
+  }
+}
