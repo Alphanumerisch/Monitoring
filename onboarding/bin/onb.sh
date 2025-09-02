@@ -194,10 +194,10 @@ es_put "/$bootstrap" "$(jq -nc \
           es_put "/_aliases" "$(jq -nc --arg i "$bootstrap" --arg a "$write_alias" \
              '{actions:[{add:{index:$i, alias:$a, is_write_index:true}}]}')" >/dev/null \
              || fail "Alias add failed: $write_alias -> $bootstrap"
-        # **neu**: rollover_alias nachtragen, falls (noch) nicht gesetzt
-                es_put "/$bootstrap/_settings" "$(jq -nc --arg a "$write_alias" \
-                '{index:{lifecycle:{rollover_alias:$a}}}')" >/dev/null \
-                || fail "Set rollover_alias failed on $bootstrap"
+ 	# **neu**: rollover_alias nachtragen, falls (noch) nicht gesetzt
+  		es_put "/$bootstrap/_settings" "$(jq -nc --arg a "$write_alias" \
+     		'{index:{lifecycle:{rollover_alias:$a}}}')" >/dev/null \
+     		|| fail "Set rollover_alias failed on $bootstrap"
         else
           fail "Bootstrap create failed: $bootstrap"
         fi

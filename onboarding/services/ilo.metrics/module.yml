@@ -9,3 +9,4 @@ components:
 - ct-ilo-metrics-mapping
 - ct-ilo-metrics-settings-v1
 priority: 600
+

@@ -9,3 +9,4 @@ components:
 - ct-veeam-syslog-mapping
 - ct-veeam-syslog-settings-v1
 priority: 500
+
