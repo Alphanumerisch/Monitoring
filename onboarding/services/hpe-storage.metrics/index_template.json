@@ -7,7 +7,7 @@
     },
     "composed_of": ["ct-common-settings","ct-ecs-common","ct-hpe-storage-metrics-mapping","ct-hpe-storage-metrics-settings-v1"],
     "priority": 600,
-    "_meta": {"description": "Index Template for iLO Metrics (Temps)"}
+    "_meta": {"description": "Index Template for HPE Storage Metrics (Temps)"}
     }
     
     
