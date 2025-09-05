@@ -1,0 +1,58 @@
+{
+  "template": {
+    "mappings": {
+      "dynamic_templates": [
+        {
+          "ipmi_strings_as_keyword": {
+            "path_match": "ipmi.*",
+            "match_mapping_type": "string",
+            "mapping": { "type": "keyword", "ignore_above": 256 }
+          }
+        }
+      ],
+      "properties": {
+        "metrics": {
+          "properties": {
+            "temperature": {
+              "properties": {
+                "celsius": { "type": "float" }
+              }
+            },
+            "fan": {
+              "properties": {
+                "rpm": { "type": "float" }
+              }
+            },
+            "power": {
+              "properties": {
+                "watts": { "type": "float" }
+              }
+            }
+          }
+        },
+        "ipmi": {
+          "properties": {
+            "sensor": {
+              "properties": {
+                "name": { "type": "keyword", "ignore_above": 256 },
+                "status": { "type": "keyword", "ignore_above": 64 },
+                "unit": { "type": "keyword", "ignore_above": 32 },
+                "runtime_hours": { "type": "keyword", "ignore_above": 16 },
+                "value_unknown": { "type": "keyword", "ignore_above": 16 },
+                "raw_reading": { "type": "text", "fields": { "keyword": { "type": "keyword", "ignore_above": 512 } } },
+                "presence": { "type": "keyword", "ignore_above": 32 },
+                "redundancy": { "type": "keyword", "ignore_above": 64 }
+              }
+            }
+          }
+        },
+        "labels": {
+          "properties": {
+            "kunde": { "type": "keyword" }
+          }
+        }
+      }
+    }
+  },
+  "_meta": { "description": "IPMI metrics mapping for temperature, fan and power sensors", "version": 1 }
+}
