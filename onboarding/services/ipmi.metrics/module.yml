@@ -1,0 +1,11 @@
+service: ipmi.service
+index_pattern: "metrics-<kunde>-ipmi-*"
+write_alias: "metrics-<kunde>-ipmi-write"
+ilm_policy: "ipmi-metrics-7dhot-180dwarm-del180"
+settings_component: "ct-ipmi-metrics-settings-v1"
+components:
+- ct-common-settings
+- ct-ecs-common
+- ct-ipmi-metrics-mapping
+- ct-ipmi-metrics-settings-v1
+priority: 700
