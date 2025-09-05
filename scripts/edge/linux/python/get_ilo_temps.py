@@ -10,8 +10,8 @@ from urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
 # ---- Konfiguration (per ENV über dein Edge-Setup) ----
-RZ_HOST = os.getenv("RZ_HOST", "localhost")
-RZ_PORT = int(os.getenv("RZ_PORT", "10530"))
+EDGE_HOST = os.getenv("EDGE_HOST", "192.168.168.161")
+EDGE_PORT = int(os.getenv("EDGE_PORT", "10530"))
 HOSTS_FILE = os.getenv("ILO_HOSTS_FILE", "/etc/ilo/hosts.yml")
 TIMEOUT = float(os.getenv("ILO_TIMEOUT", "10.0"))
 
@@ -24,7 +24,7 @@ session.mount("https://", HTTPAdapter(max_retries=retries))
 def open_socket():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.settimeout(5.0)
-    s.connect((RZ_HOST, RZ_PORT))
+    s.connect((EDGE_HOST, EDGE_PORT))
     return s
 
 def send_json(sock, doc: dict):
@@ -67,11 +67,15 @@ for entry in ilos:
                 "kind": "event",
                 "category": ["hardware"],
                 "type": ["error"],
+                "outcome": "failure",
                 "dataset": "ilo.thermal"
             },
             "service": {"type": "ilo"},
             "host": {"name": ilo_name, "ip": [ilo_host]},
-            "labels": {"kunde": customer},
+            "observer": {
+                "vendor": "HPE",
+                "product": "iLO"
+            },
             "hpe": {"ilo": {"error": str(e)}}
         }
         try:
@@ -92,11 +96,15 @@ for entry in ilos:
                 "kind": "metric",
                 "category": ["hardware"],
                 "type": ["info"],
+                "outcome": "success",
                 "dataset": "ilo.thermal"
             },
             "service": {"type": "ilo"},
             "host": {"name": ilo_name, "ip": [ilo_host]},
-            "labels": {"kunde": customer},
+            "observer": {
+                "vendor": "HPE",
+                "product": "iLO"
+            },
 
             # vendor-/domänenspezifisch unter Namespace:
             "hpe": {

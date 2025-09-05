@@ -8,7 +8,7 @@
 param(
   [string]$Slot = $env:HPE_SLOT,
   [string]$SsaCli = 'C:\Program Files\Smart Storage Administrator\ssacli\bin\ssacli.exe',
-  [string]$LogstashHost = '192.168.168.162',
+  [string]$LogstashHost = '192.168.168.161',
   [int]$LogstashPort = 10540
 )
 
@@ -84,9 +84,10 @@ try {
 function Send-ErrorDoc([string]$msg) {
   $doc = @{
     '@timestamp' = $ts
-    event  = @{ category='storage'; kind='state'; outcome='failure' }
+    event  = @{ category='storage'; kind='event'; type='error'; outcome='failure'; dataset='hpe.smartarray' }
     service= @{ type='hpe.smartarray' }
-    host   = @{ name=$hostName }
+    host   = @{ name=$hostName; ip=@() }
+    observer = @{ vendor='HPE'; product='Smart Array' }
     error  = @{ message=$msg }
   }
   $json = $doc | ConvertTo-Json -Compress -Depth 10
@@ -125,9 +126,9 @@ foreach ($line in $ctrlDetail) {
 # Controller-Dokument
 $ctrlDoc = @{
   '@timestamp' = $ts
-  event  = @{ category='storage'; kind='state'; outcome='success' }
+  event  = @{ category='storage'; kind='state'; type='info'; outcome='success'; dataset='hpe.smartarray' }
   service= @{ type='hpe.smartarray' }
-  host   = @{ name=$hostName }
+  host   = @{ name=$hostName; ip=@() }
   observer = @{ vendor='HPE'; product='Smart Array'; version=(Null-If $kv['Firmware Version']) }
   hpe = @{
     ctrl = @{
@@ -227,9 +228,9 @@ foreach ($block in $pdBlocks) {
 
   $doc = @{
     '@timestamp' = $ts
-    event  = @{ category='storage'; kind='metric'; outcome='success' }
+    event  = @{ category='storage'; kind='metric'; type='info'; outcome='success'; dataset='hpe.smartarray' }
     service= @{ type='hpe.smartarray' }
-    host   = @{ name=$hostName }
+    host   = @{ name=$hostName; ip=@() }
     observer = @{ vendor='HPE'; product='Smart Array'; version=(Null-If $kv['Firmware Version']) }
     hpe = @{
       ctrl = @{ slot = $Slot }
@@ -324,9 +325,9 @@ foreach ($block in $ldBlocks) {
 
   $ldDoc = @{
     '@timestamp' = $ts
-    event  = @{ category='storage'; kind='state'; outcome='success' }
+    event  = @{ category='storage'; kind='state'; type='info'; outcome='success'; dataset='hpe.smartarray' }
     service= @{ type='hpe.smartarray' }
-    host   = @{ name=$hostName }
+    host   = @{ name=$hostName; ip=@() }
     observer = @{ vendor='HPE'; product='Smart Array'; version=(Null-If $kv['Firmware Version']) }
     hpe = @{
       ctrl = @{ slot = $Slot }
