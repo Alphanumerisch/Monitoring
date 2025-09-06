@@ -1,0 +1,11 @@
+{
+"index_patterns": ["metrics-<kunde>-ipmi-*"] ,
+"template": {
+"settings": {
+"index": { "lifecycle": { "name": "<policy>" } }
+}
+},
+"composed_of": ["ct-common-settings","ct-ecs-common","ct-ipmi-metrics-mapping","ct-ipmi-metrics-settings-v1"],
+"priority": 700,
+"_meta": {"description": "Index Template for IPMI Metrics (Temperature, Fan, Power)"}
+}
