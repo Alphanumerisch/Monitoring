@@ -4,10 +4,10 @@
         "index": {
           "number_of_shards": 1,
           "number_of_replicas": 0,
-          "refresh_interval": "15s"
+          "refresh_interval": "30s"
         }
       }
     },
-    "_meta": { "description": "Service Settings for hpe-storage Metrics", "version": 1 }
+    "_meta": { "description": "Service Settings for hpe-storage Status (Update-based, no ILM)", "version": 1 }
   }
   
