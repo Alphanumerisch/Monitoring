@@ -2,7 +2,12 @@
 "index_patterns": ["metrics-<kunde>-veeam-jobs-*"] ,
 "template": {
 "settings": {
-"index": { "lifecycle": { "name": "<policy>" } }
+"index": { 
+  "lifecycle": { 
+    "name": "<policy>",
+    "rollover_alias": "<alias>"
+  } 
+}
 }
 },
 "composed_of": ["ct-common-settings","ct-ecs-common","ct-veeam-metrics-mapping","ct-veeam-metrics-settings-v1"],

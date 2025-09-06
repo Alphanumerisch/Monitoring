@@ -93,9 +93,9 @@ service_add(){
     ok "CT created: $ct_map"
   fi
 
-  # 3) Index-Template rendern & anlegen (nutzt <policy> Platzhalter)
+  # 3) Index-Template rendern & anlegen (nutzt <policy> und <alias> Platzhalter)
   local it_name="it-${svc//./-}"
-  local it_body; it_body=$(render_file "$SVC_DIR/index_template.json" kunde='*' policy="$policy")
+  local it_body; it_body=$(render_file "$SVC_DIR/index_template.json" kunde='*' policy="$policy" alias='*')
 
   if it_exists "$it_name"; then
     ok "IT exists: $it_name"
@@ -190,6 +190,19 @@ tenant_add(){
              aliases:{($a):{is_write_index:true}},
              settings:{ index:{ lifecycle:{ rollover_alias:$a } } }
            }')" >/dev/null || {
+          # Falls Index evtl. schon existiert: Alias separat setzen
+          if index_exists "$bootstrap"; then
+            es_put "/_aliases" "$(jq -nc --arg i "$bootstrap" --arg a "$write_alias" \
+               '{actions:[{add:{index:$i, alias:$a, is_write_index:true}}]}')" >/dev/null \
+               || fail "Alias add failed: $write_alias -> $bootstrap"
+            # rollover_alias nur für Timeline-Indizes nachtragen
+            es_put "/$bootstrap/_settings" "$(jq -nc --arg a "$write_alias" \
+              '{index:{lifecycle:{rollover_alias:$a}}}')" >/dev/null \
+              || fail "Set rollover_alias failed on $bootstrap"
+          else
+            fail "Bootstrap create failed: $bootstrap"
+          fi
+        }
       else
         # Status-Index ohne ILM
         es_put "/$bootstrap" "$(jq -nc \
@@ -197,23 +210,16 @@ tenant_add(){
           '{
              aliases:{($a):{is_write_index:true}}
            }')" >/dev/null || {
-      fi
-
-        # Falls Index evtl. schon existiert: Alias separat setzen
-        if index_exists "$bootstrap"; then
-          es_put "/_aliases" "$(jq -nc --arg i "$bootstrap" --arg a "$write_alias" \
-             '{actions:[{add:{index:$i, alias:$a, is_write_index:true}}]}')" >/dev/null \
-             || fail "Alias add failed: $write_alias -> $bootstrap"
-          # rollover_alias nur für Timeline-Indizes nachtragen
-          if [[ -n "$ilm_policy" && "$ilm_policy" != "null" ]]; then
-            es_put "/$bootstrap/_settings" "$(jq -nc --arg a "$write_alias" \
-              '{index:{lifecycle:{rollover_alias:$a}}}')" >/dev/null \
-              || fail "Set rollover_alias failed on $bootstrap"
+          # Falls Index evtl. schon existiert: Alias separat setzen
+          if index_exists "$bootstrap"; then
+            es_put "/_aliases" "$(jq -nc --arg i "$bootstrap" --arg a "$write_alias" \
+               '{actions:[{add:{index:$i, alias:$a, is_write_index:true}}]}')" >/dev/null \
+               || fail "Alias add failed: $write_alias -> $bootstrap"
+          else
+            fail "Bootstrap create failed: $bootstrap"
           fi
-        else
-          fail "Bootstrap create failed: $bootstrap"
-        fi
-      }
+        }
+      fi
       ok "Bootstrap+Alias created: $bootstrap ⇢ $write_alias"
     fi
 
