@@ -1,0 +1,10 @@
+scripts:
+  ipmi:
+    path: "/opt/python_scripts/get_ipmi_data.py"
+    interval: 300  # 5 Minuten
+    args: ["--all"]
+    timeout: 120   # 2 Minuten Timeout
+
+logging:
+  level: "INFO"
+  file: "/var/log/edge-monitoring.log"
