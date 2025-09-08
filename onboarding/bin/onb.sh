@@ -93,9 +93,9 @@ service_add(){
     ok "CT created: $ct_map"
   fi
 
-  # 3) Index-Template rendern & anlegen (nutzt <policy> Platzhalter)
+  # 3) Index-Template rendern & anlegen (nutzt <policy> und <alias> Platzhalter)
   local it_name="it-${svc//./-}"
-  local it_body; it_body=$(render_file "$SVC_DIR/index_template.json" kunde='*' policy="$policy")
+  local it_body; it_body=$(render_file "$SVC_DIR/index_template.json" kunde='*' policy="$policy" alias='*')
 
   if it_exists "$it_name"; then
     ok "IT exists: $it_name"
@@ -141,14 +141,16 @@ tenant_add(){
     local SVC_DIR="$ROOT_DIR/services/$svc"
     [[ -d "$SVC_DIR" ]] || fail "unknown service: $svc (Ordner fehlt: $SVC_DIR)"
 
-    # module.yml lesen (write_alias, index_pattern; yq mit Fallback)
-    local write_alias="" index_pattern=""
+    # module.yml lesen (write_alias, index_pattern, ilm_policy; yq mit Fallback)
+    local write_alias="" index_pattern="" ilm_policy=""
     if command -v yq >/dev/null; then
       write_alias="$(yq -r '.write_alias'   "$SVC_DIR/module.yml" 2>/dev/null || true)"
       index_pattern="$(yq -r '.index_pattern' "$SVC_DIR/module.yml" 2>/dev/null || true)"
+      ilm_policy="$(yq -r '.ilm_policy'    "$SVC_DIR/module.yml" 2>/dev/null || true)"
     fi
     [[ -n "$write_alias" ]] || write_alias=$(grep -E '^write_alias:'   "$SVC_DIR/module.yml" | sed -E 's/^[^:]+:[[:space:]]*"?([^"]+)"?/\1/')
     [[ -n "$index_pattern" ]] || index_pattern=$(grep -E '^index_pattern:' "$SVC_DIR/module.yml" | sed -E 's/^[^:]+:[[:space:]]*"?([^"]+)"?/\1/')
+    [[ -n "$ilm_policy" ]] || ilm_policy=$(grep -E '^ilm_policy:'    "$SVC_DIR/module.yml" | sed -E 's/^[^:]+:[[:space:]]*"?([^"]+)"?/\1/')
 
     # Platzhalter ersetzen
     write_alias="${write_alias//<kunde>/$kunde}"
@@ -160,7 +162,7 @@ tenant_add(){
     local prefix="${index_pattern%\*}"
     local bootstrap="${prefix}000001"
 
-    info "svc=$svc alias=$write_alias bootstrap=$bootstrap"
+    info "svc=$svc alias=$write_alias bootstrap=$bootstrap policy=$ilm_policy"
 
         # Per-Tenant IT setzen (stellt rollover_alias per Template bereit)
 
@@ -178,60 +180,80 @@ tenant_add(){
     else
       # Erstelle Alias zusammen mit Bootstrap-Index in einem PUT (idempotent)
       # Erzeugt Index mit Alias, wenn weder Index noch Alias existieren.
-
-#      es_put "/$bootstrap" "$(jq -nc --arg a "$write_alias" '{"aliases":{($a):{"is_write_index":true}}}')" >/dev/null || {
-
-# neu: setze zusätzlich den rollover_alias als Index-Setting
-es_put "/$bootstrap" "$(jq -nc \
-  --arg a "$write_alias" \
-  '{
-     aliases:{($a):{is_write_index:true}},
-     settings:{ index:{ lifecycle:{ rollover_alias:$a } } }
-   }')" >/dev/null || {
-
-        # Falls Index evtl. schon existiert: Alias separat setzen
-        if index_exists "$bootstrap"; then
-          es_put "/_aliases" "$(jq -nc --arg i "$bootstrap" --arg a "$write_alias" \
-             '{actions:[{add:{index:$i, alias:$a, is_write_index:true}}]}')" >/dev/null \
-             || fail "Alias add failed: $write_alias -> $bootstrap"
- 	# **neu**: rollover_alias nachtragen, falls (noch) nicht gesetzt
-  		es_put "/$bootstrap/_settings" "$(jq -nc --arg a "$write_alias" \
-     		'{index:{lifecycle:{rollover_alias:$a}}}')" >/dev/null \
-     		|| fail "Set rollover_alias failed on $bootstrap"
-        else
-          fail "Bootstrap create failed: $bootstrap"
-        fi
-      }
+      
+      # Status-Indizes (ohne ILM) vs. Timeline-Indizes (mit ILM)
+      if [[ -n "$ilm_policy" && "$ilm_policy" != "null" ]]; then
+        # Timeline-Index mit ILM
+        es_put "/$bootstrap" "$(jq -nc \
+          --arg a "$write_alias" \
+          '{
+             aliases:{($a):{is_write_index:true}},
+             settings:{ index:{ lifecycle:{ rollover_alias:$a } } }
+           }')" >/dev/null || {
+          # Falls Index evtl. schon existiert: Alias separat setzen
+          if index_exists "$bootstrap"; then
+            es_put "/_aliases" "$(jq -nc --arg i "$bootstrap" --arg a "$write_alias" \
+               '{actions:[{add:{index:$i, alias:$a, is_write_index:true}}]}')" >/dev/null \
+               || fail "Alias add failed: $write_alias -> $bootstrap"
+            # rollover_alias nur für Timeline-Indizes nachtragen
+            es_put "/$bootstrap/_settings" "$(jq -nc --arg a "$write_alias" \
+              '{index:{lifecycle:{rollover_alias:$a}}}')" >/dev/null \
+              || fail "Set rollover_alias failed on $bootstrap"
+          else
+            fail "Bootstrap create failed: $bootstrap"
+          fi
+        }
+      else
+        # Status-Index ohne ILM
+        es_put "/$bootstrap" "$(jq -nc \
+          --arg a "$write_alias" \
+          '{
+             aliases:{($a):{is_write_index:true}}
+           }')" >/dev/null || {
+          # Falls Index evtl. schon existiert: Alias separat setzen
+          if index_exists "$bootstrap"; then
+            es_put "/_aliases" "$(jq -nc --arg i "$bootstrap" --arg a "$write_alias" \
+               '{actions:[{add:{index:$i, alias:$a, is_write_index:true}}]}')" >/dev/null \
+               || fail "Alias add failed: $write_alias -> $bootstrap"
+          else
+            fail "Bootstrap create failed: $bootstrap"
+          fi
+        }
+      fi
       ok "Bootstrap+Alias created: $bootstrap ⇢ $write_alias"
     fi
 
-    # 2c) rollover_alias sicherstellen (auch wenn Alias schon existierte)
+    # 2c) rollover_alias sicherstellen (nur für Timeline-Indizes)
     #     -> ermittele den aktuellen Write-Index des Aliases
-    {
-      resolved="$(es_get "/_alias/$write_alias?filter_path=*")"
-      write_index="$(echo "$resolved" \
-        | jq -r 'to_entries[] | select(.value.aliases["'"$write_alias"'"].is_write_index==true) | .key' \
-        2>/dev/null || true)"
-      # Fallback: falls is_write_index-Flag fehlt (z.B. manuell angelegte Aliase),
-      # nimm den einzigen gemappten Index
-      if [[ -z "$write_index" ]]; then
-        write_index="$(echo "$resolved" | jq -r 'keys[0]' 2>/dev/null || true)"
-      fi
-
-      if [[ -z "$write_index" ]]; then
-        warn "Konnte Write-Index für $write_alias nicht auflösen – überspringe rollover_alias-Set."
-      else
-        # Prüfen ob bereits gesetzt
-        settings="$(es_get "/$write_index/_settings?filter_path=*.*.settings.index.lifecycle.rollover_alias")"
-        if ! echo "$settings" | grep -q "\"$write_alias\""; then
-          info "Set rollover_alias on $write_index -> $write_alias"
-          es_put "/$write_index/_settings" "$(jq -nc --arg a "$write_alias" \
-             '{index:{lifecycle:{rollover_alias:$a}}}')" >/dev/null \
-             || fail "rollover_alias set failed: $write_index"
-          ok "rollover_alias updated on $write_index"
+    if [[ -n "$ilm_policy" && "$ilm_policy" != "null" ]]; then
+      {
+        resolved="$(es_get "/_alias/$write_alias?filter_path=*")"
+        write_index="$(echo "$resolved" \
+          | jq -r 'to_entries[] | select(.value.aliases["'"$write_alias"'"].is_write_index==true) | .key' \
+          2>/dev/null || true)"
+        # Fallback: falls is_write_index-Flag fehlt (z.B. manuell angelegte Aliase),
+        # nimm den einzigen gemappten Index
+        if [[ -z "$write_index" ]]; then
+          write_index="$(echo "$resolved" | jq -r 'keys[0]' 2>/dev/null || true)"
         fi
-      fi
-    }
+
+        if [[ -z "$write_index" ]]; then
+          warn "Konnte Write-Index für $write_alias nicht auflösen – überspringe rollover_alias-Set."
+        else
+          # Prüfen ob bereits gesetzt
+          settings="$(es_get "/$write_index/_settings?filter_path=*.*.settings.index.lifecycle.rollover_alias")"
+          if ! echo "$settings" | grep -q "\"$write_alias\""; then
+            info "Set rollover_alias on $write_index -> $write_alias"
+            es_put "/$write_index/_settings" "$(jq -nc --arg a "$write_alias" \
+               '{index:{lifecycle:{rollover_alias:$a}}}')" >/dev/null \
+               || fail "rollover_alias set failed: $write_index"
+            ok "rollover_alias updated on $write_index"
+          fi
+        fi
+      }
+    else
+      info "Status-Index ohne ILM: $write_alias (kein rollover_alias nötig)"
+    fi
 
 
 

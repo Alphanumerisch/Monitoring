@@ -2,7 +2,12 @@
 "index_patterns": ["metrics-<kunde>-ilo-*"] ,
 "template": {
 "settings": {
-"index": { "lifecycle": { "name": "<policy>" } }
+"index": { 
+  "lifecycle": { 
+    "name": "<policy>",
+    "rollover_alias": "<alias>"
+  } 
+}
 }
 },
 "composed_of": ["ct-common-settings","ct-ecs-common","ct-ilo-metrics-mapping","ct-ilo-metrics-settings-v1"],

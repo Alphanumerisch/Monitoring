@@ -1,0 +1,29 @@
+scripts:
+  # IPMI Monitoring
+  ipmi:
+    path: "/opt/python_scripts/get_ipmi_data.py"
+    interval: 300  # 5 Minuten
+    args: ["--all"]
+    timeout: 120   # 2 Minuten Timeout
+    enabled: true  # Optional: Script aktivieren/deaktivieren
+
+  # iLO Temperature Monitoring
+  ilo_temps:
+    path: "/opt/python_scripts/get_ilo_temps.py"
+    interval: 300  # 5 Minuten
+    args: []       # Keine zusätzlichen Argumente
+    timeout: 180   # 3 Minuten Timeout
+    enabled: true
+
+  # Beispiel für ein Custom Script
+  custom_monitoring:
+    path: "/opt/python_scripts/my_custom_script.py"
+    interval: 600  # 10 Minuten
+    args: ["--verbose", "--config", "/etc/custom/config.json"]
+    timeout: 60    # 1 Minute Timeout
+    enabled: false # Deaktiviert bis Script bereit ist
+
+logging:
+  level: "INFO"
+  file: "/var/log/edge-monitoring.log"
+

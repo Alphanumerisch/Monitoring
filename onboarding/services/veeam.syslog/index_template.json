@@ -1,7 +1,14 @@
 {
 "index_patterns": ["logs-<kunde>-veeam-syslog-*"] ,
 "template": {
-"settings": { "index": { "lifecycle": { "name": "<policy>" } } }
+"settings": { 
+  "index": { 
+    "lifecycle": { 
+      "name": "<policy>",
+      "rollover_alias": "<alias>"
+    } 
+  } 
+}
 },
 "composed_of": ["ct-common-settings","ct-ecs-common","ct-veeam-syslog-mapping","ct-veeam-syslog-settings-v1"],
 "priority": 500,

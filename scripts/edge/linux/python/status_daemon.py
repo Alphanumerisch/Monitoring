@@ -6,6 +6,7 @@ Zeigt aktuellen Status an
 
 import subprocess
 import json
+import os
 from datetime import datetime
 
 def get_daemon_status():
@@ -16,13 +17,27 @@ def get_daemon_status():
                               capture_output=True, text=True)
         service_status = result.stdout.strip()
         
-        # Log-Datei lesen (letzte 20 Zeilen)
-        try:
-            log_result = subprocess.run(['tail', '-20', '/var/log/edge-monitoring.log'], 
-                                      capture_output=True, text=True)
-            log_lines = log_result.stdout.strip().split('\n')
-        except:
-            log_lines = ["Log file not accessible"]
+        # Log-Datei lesen (letzte 20 Zeilen) - versuche verschiedene Pfade
+        log_lines = []
+        log_paths = [
+            '/var/log/edge-monitoring.log',  # Root-Pfad
+            os.path.expanduser('~/edge-monitoring.log'),  # User-Home
+            './edge-monitoring.log'  # Aktuelles Verzeichnis
+        ]
+        
+        for log_path in log_paths:
+            if os.path.exists(log_path):
+                try:
+                    log_result = subprocess.run(['tail', '-20', log_path], 
+                                              capture_output=True, text=True)
+                    log_lines = log_result.stdout.strip().split('\n')
+                    print(f"📋 Log-Datei gefunden: {log_path}")
+                    break
+                except:
+                    continue
+        
+        if not log_lines:
+            log_lines = ["Keine Log-Datei gefunden oder nicht lesbar"]
         
         return service_status, log_lines
     except Exception as e:
@@ -53,30 +68,78 @@ def print_status():
     print("📋 Script Status (from logs):")
     print("-" * 40)
     
-    # IPMI Script Status analysieren
-    ipmi_runs = [line for line in log_lines if "ipmi" in line.lower()]
-    if ipmi_runs:
-        print("🔄 IPMI Script:")
-        print(f"   Total runs in log: {len(ipmi_runs)}")
+    # Script-Status analysieren (generisch für alle Scripts)
+    scripts_info = {}
+    
+    # Sammle alle Script-Starts und Completions
+    for line in log_lines:
+        if "🔄 Starting" in line:
+            parts = line.split(" - ")
+            if len(parts) >= 3:
+                timestamp = parts[0]
+                script_name = parts[2].replace("🔄 Starting ", "").replace("...", "").strip()
+                if script_name not in scripts_info:
+                    scripts_info[script_name] = {"starts": [], "completions": [], "cancellations": []}
+                scripts_info[script_name]["starts"].append(timestamp)
         
-        # Letzte erfolgreiche Ausführung
-        last_success = [line for line in ipmi_runs if "completed successfully" in line]
-        if last_success:
-            print(f"   Last success: {last_success[-1].split(' - ')[0]}")
+        elif "✅" in line and "completed successfully" in line:
+            parts = line.split(" - ")
+            if len(parts) >= 3:
+                timestamp = parts[0]
+                # Extract script name from message like "✅ ipmi completed successfully in 66.9s"
+                msg = parts[2]
+                script_name = msg.replace("✅ ", "").split(" completed")[0].strip()
+                if script_name not in scripts_info:
+                    scripts_info[script_name] = {"starts": [], "completions": [], "cancellations": []}
+                scripts_info[script_name]["completions"].append(timestamp)
+                
+        elif "⚠️" in line and "was cancelled" in line:
+            parts = line.split(" - ")
+            if len(parts) >= 3:
+                timestamp = parts[0]
+                msg = parts[2]
+                script_name = msg.replace("⚠️ ", "").split(" was cancelled")[0].strip()
+                if script_name not in scripts_info:
+                    scripts_info[script_name] = {"starts": [], "completions": [], "cancellations": []}
+                scripts_info[script_name]["cancellations"].append(timestamp)
+    
+    # Zeige Status für jedes gefundene Script
+    for script_name, info in scripts_info.items():
+        print(f"🔄 {script_name.upper()} Script:")
         
-        # Letzte Ausführung
-        last_run = [line for line in ipmi_runs if "Starting ipmi" in line]
-        if last_run:
-            print(f"   Last start: {last_run[-1].split(' - ')[0]}")
+        total_starts = len(info["starts"])
+        total_completions = len(info["completions"])
+        total_cancellations = len(info["cancellations"])
         
-        # Aktuell laufend?
-        running = [line for line in ipmi_runs if "Starting ipmi" in line and "completed successfully" not in line]
-        if running and len(running) > len([line for line in ipmi_runs if "completed successfully" in line]):
-            print("   Status: 🔄 RUNNING")
+        print(f"   Total starts: {total_starts}")
+        print(f"   Successful runs: {total_completions}")
+        print(f"   Cancelled runs: {total_cancellations}")
+        
+        # Letzter Start und Completion
+        if info["starts"]:
+            print(f"   Last start: {info['starts'][-1]}")
+        if info["completions"]:
+            print(f"   Last success: {info['completions'][-1]}")
+            
+        # Status bestimmen: Prüfe ob der letzte Start auch abgeschlossen wurde
+        if info["starts"] and info["completions"]:
+            last_start_time = info["starts"][-1]
+            last_completion_time = info["completions"][-1] if info["completions"] else ""
+            
+            # Vergleiche Zeitstempel (als Strings)
+            if last_start_time > last_completion_time:
+                print("   Status: 🔄 RUNNING")
+            else:
+                print("   Status: ⏸️  IDLE")
+        elif info["starts"] and not info["completions"]:
+            print("   Status: 🔄 RUNNING (no completions yet)")
         else:
-            print("   Status: ⏸️  IDLE")
-    else:
-        print("🔄 IPMI Script: No runs found in logs")
+            print("   Status: ⏹️  UNKNOWN")
+        
+        print()
+    
+    if not scripts_info:
+        print("📋 No script activity found in recent logs")
     
     print()
     
