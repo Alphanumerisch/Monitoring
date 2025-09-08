@@ -1,9 +1,9 @@
 customer: agrarware
 services:
-- veeam.metrics
+- veeam.status
 - veeam.syslog
 - ilo.metrics
-- hpe-storage.metrics
+- hpe-storage.status
 kibana:
 space: AGRAR
 

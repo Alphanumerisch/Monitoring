@@ -1,7 +1,7 @@
-service: hpe-storage.metrics
-index_pattern: "metrics-<kunde>-hpe-storage-*"
-write_alias: "metrics-<kunde>-hpe-storage-write"
-ilm_policy: "hpe-storage-metrics-7dhot-180dwarm-del180"
+service: hpe-storage.status
+index_pattern: "status-<kunde>-hpe-storage-*"
+write_alias: "status-<kunde>-hpe-storage-write"
+# KEIN ilm_policy - Status-Index ohne ILM (Update-basiert)
 settings_component: "ct-hpe-storage-metrics-settings-v1"
 components:
 - ct-common-settings

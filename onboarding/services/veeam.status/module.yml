@@ -1,0 +1,11 @@
+service: veeam.status
+index_pattern: "status-<kunde>-veeam-jobs-*"
+write_alias: "status-<kunde>-veeam-jobs-write"
+ilm_policy: 
+settings_component: "ct-veeam-status-settings-v1"
+components:
+- ct-common-settings
+- ct-ecs-common
+- ct-veeam-status-mapping
+- ct-veeam-status-settings-v1
+priority: 500

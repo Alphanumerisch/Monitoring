@@ -1,0 +1,13 @@
+{
+"index_patterns": ["status-<kunde>-veeam-jobs-*"] ,
+"template": {
+"settings": {
+"number_of_shards": 1,
+"number_of_replicas": 0,
+"refresh_interval": "30s"
+}
+},
+"composed_of": ["ct-common-settings","ct-ecs-common","ct-veeam-status-mapping","ct-veeam-status-settings-v1"],
+"priority": 500,
+"_meta": {"description": "Index Template for Veeam Status (Update-based, no ILM)"}
+}

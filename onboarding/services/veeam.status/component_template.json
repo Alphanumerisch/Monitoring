@@ -12,6 +12,5 @@
 }
 }
 },
-"_meta": {"description": "Veeam metrics mapping", "version": 1}
+"_meta": {"description": "Veeam status mapping (Update-based, no ILM)", "version": 1}
 }
-
