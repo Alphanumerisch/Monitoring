@@ -1,0 +1,18 @@
+{
+  "index_patterns": ["logs-<kunde>-utm-syslog-*"] ,
+  "template": {
+    "settings": {
+      "index": {
+        "lifecycle": {
+          "name": "<policy>",
+          "rollover_alias": "<alias>"
+        }
+      }
+    }
+  },
+  "composed_of": ["ct-common-settings","ct-ecs-common","ct-utm-syslog-mapping","ct-utm-syslog-settings-v1"],
+  "priority": 500,
+  "_meta": {"description": "Index Template for UTM Syslog"}
+}
+
+

@@ -1,0 +1,26 @@
+{
+  "template": {
+    "mappings": {
+      "properties": {
+        "utm": {
+          "properties": {
+            "context": {"type": "keyword"}
+          }
+        },
+        "source": {
+          "properties": {
+            "interface": {"type": "keyword"}
+          }
+        },
+        "destination": {
+          "properties": {
+            "interface": {"type": "keyword"}
+          }
+        }
+      }
+    }
+  },
+  "_meta": {"description": "UTM syslog mapping", "version": 1}
+}
+
+
