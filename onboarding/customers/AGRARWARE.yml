@@ -1,6 +1,6 @@
 customer: agrarware
 services:
-- veeam.metrics
+- veeam.status
 - veeam.syslog
 - ilo.metrics
 - hpe-storage.status
