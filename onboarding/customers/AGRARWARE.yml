@@ -3,7 +3,7 @@ services:
 - veeam.metrics
 - veeam.syslog
 - ilo.metrics
-- hpe-storage.metrics
+- hpe-storage.status
 kibana:
 space: AGRAR
 
