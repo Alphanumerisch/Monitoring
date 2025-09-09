@@ -33,8 +33,7 @@ jobs:
           pipeline.ecs_compatibility: v8
           config.reload.automatic: false
           xpack.monitoring.enabled: false
-          http.enabled: false
-          path.config: /ls/pipelines
+          http.enabled: false        
           YAML
 
       - name: Syntax-Check (${{ matrix.component }})
