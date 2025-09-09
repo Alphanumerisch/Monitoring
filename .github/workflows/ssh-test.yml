@@ -7,6 +7,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Test SSH connection
+      - run: |
+          eval $(ssh-agent -s)
+          ssh-add <(echo "${{ secrets.SSH_KEY_VM }}") <<< "${{ secrets.SSH_PASSPHRASE_VM }}"
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SSH_HOST_LS_DEV_VM }}
