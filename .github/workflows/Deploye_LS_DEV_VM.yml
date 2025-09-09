@@ -53,7 +53,8 @@ jobs:
         port: ${{ secrets.SSH_PORT_LS_DEV_VM }}
         source: "temp_edge_pipelines/*"
         target: "/opt/elk_dev/logstash/edge/pipelines/forwarder/"
-        strip_components: 1
+        timeout: 60s
+        command_timeout: 60s
         
     - name: Prepare RZ Pipelines
       run: |
@@ -79,15 +80,43 @@ jobs:
           find /opt/elk_dev/logstash/rz/pipelines/rz -type f ! -name "99-output-to-rz.conf" ! -name "input-edge.conf" -delete
           
     - name: Sync RZ Pipelines
-      uses: appleboy/scp-action@v0.1.7
+      uses: appleboy/ssh-action@v1.2.0
       with:
         host: ${{ secrets.SSH_HOST_LS_DEV_VM }}
         username: ${{ secrets.SSH_USER_LS_DEV_VM }}
         key: ${{ secrets.SSH_KEY_LS_DEV_VM }}
         port: ${{ secrets.SSH_PORT_LS_DEV_VM }}
-        source: "temp_rz_pipelines/*"
-        target: "/opt/elk_dev/logstash/rz/pipelines/rz/"
-        strip_components: 1
+        script: |
+          # Erstelle Zielverzeichnis falls es nicht existiert
+          mkdir -p /opt/elk_dev/logstash/rz/pipelines/rz
+          
+          # Lösche alle Dateien im Zielverzeichnis außer 99-output-to-rz.conf und input-edge.conf
+          find /opt/elk_dev/logstash/rz/pipelines/rz -type f ! -name "99-output-to-rz.conf" ! -name "input-edge.conf" -delete
+          
+          # Erstelle temporäres Verzeichnis auf dem Server
+          mkdir -p /tmp/rz_pipelines_upload
+          
+          # Kopiere alle Dateien aus temp_rz_pipelines nach /tmp/rz_pipelines_upload
+          # (Dies wird über einen separaten SCP-Befehl gemacht)
+        
+    - name: Upload RZ Pipeline Files
+      run: |
+        # Verwende scp direkt mit SSH-Agent
+        scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P ${{ secrets.SSH_PORT_LS_DEV_VM }} -r temp_rz_pipelines/* ${{ secrets.SSH_USER_LS_DEV_VM }}@${{ secrets.SSH_HOST_LS_DEV_VM }}:/tmp/rz_pipelines_upload/
+        
+    - name: Move RZ Pipeline Files to Final Location
+      uses: appleboy/ssh-action@v1.2.0
+      with:
+        host: ${{ secrets.SSH_HOST_LS_DEV_VM }}
+        username: ${{ secrets.SSH_USER_LS_DEV_VM }}
+        key: ${{ secrets.SSH_KEY_LS_DEV_VM }}
+        port: ${{ secrets.SSH_PORT_LS_DEV_VM }}
+        script: |
+          # Verschiebe Dateien von /tmp nach dem finalen Verzeichnis
+          cp -r /tmp/rz_pipelines_upload/* /opt/elk_dev/logstash/rz/pipelines/rz/
+          
+          # Aufräumen
+          rm -rf /tmp/rz_pipelines_upload
         
     - name: Cleanup
       run: |
