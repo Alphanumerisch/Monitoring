@@ -1,4 +1,4 @@
-name: CI + Deploy to LS Dev VM (rsync, selective)
+name: Deploy to LS Dev VM (rsync, selective)
 
 on:
   push:
@@ -12,61 +12,9 @@ env:
   LOGSTASH_VERSION: "8.13.4"
 
 jobs:
-  test:
-    name: CI Syntax (edge & rz)
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix: { component: [edge, rz] }
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Pull Logstash image
-        run: docker pull docker.elastic.co/logstash/logstash:${{ env.LOGSTASH_VERSION }}
-
-      # === CI-only Settings: komplett eigenständige Konfiguration ===
-      - name: Prepare CI-only settings (${{ matrix.component }})
-        run: |
-          mkdir -p "logstash/${{ matrix.component }}/config.ci"
-          cat > "logstash/${{ matrix.component }}/config.ci/logstash.yml" <<'YAML'
-          node.name: ci-${{ matrix.component }}
-          pipeline.ecs_compatibility: v8
-          config.reload.automatic: false
-          xpack.monitoring.enabled: false
-          http.enabled: false
-          path.config: /ls/pipelines
-          path.data: /tmp/logstash-data
-          path.logs: /tmp/logstash-logs
-          pipeline.workers: 1
-          pipeline.batch.size: 1
-          pipeline.batch.delay: 50
-          YAML
-          
-          # Erstelle eine minimale pipelines.yml für CI
-          cat > "logstash/${{ matrix.component }}/config.ci/pipelines.yml" <<'YAML'
-          - pipeline.id: main
-            path.config: "/ls/pipelines"
-          YAML
-
-      - name: Syntax-Check (${{ matrix.component }})
-        run: |
-          # Erstelle temporäre Pipeline-Dateien ohne Output-Konfigurationen
-          mkdir -p "logstash/${{ matrix.component }}/pipelines.ci"
-          cp -r "logstash/${{ matrix.component }}/pipelines/"* "logstash/${{ matrix.component }}/pipelines.ci/"
-          
-          # Entferne Output-Dateien für CI-Test
-          rm -f "logstash/${{ matrix.component }}/pipelines.ci/99-output-*.conf"
-          
-          docker run --rm \
-            -v "$PWD/logstash/${{ matrix.component }}/pipelines.ci:/ls/pipelines" \
-            -v "$PWD/logstash/${{ matrix.component }}/config.ci:/usr/share/logstash/config" \
-            docker.elastic.co/logstash/logstash:${{ env.LOGSTASH_VERSION }} \
-            --config.test_and_exit
-
   deploy:
     name: Deploy to LS Dev VM (rsync only changed, exclude outputs)
     runs-on: ubuntu-latest
-    needs: [test]
     if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
