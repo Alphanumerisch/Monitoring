@@ -54,7 +54,7 @@ jobs:
             -v "$PWD/logstash/${{ matrix.component }}:/ls" \
             -v "$PWD/logstash/${{ matrix.component }}/config.ci:/usr/share/logstash/config" \
             docker.elastic.co/logstash/logstash:${{ env.LOGSTASH_VERSION }} \
-            bash -lc 'logstash -t'
+            --config.test_and_exit
 
   deploy:
     name: Deploy to LS Dev VM (rsync only changed, exclude outputs)
@@ -122,6 +122,6 @@ jobs:
       - name: Sanity check in containers
         run: |
           ssh target '
-            docker exec logstash-edge logstash -t || { echo "edge config invalid"; exit 1; }
-            docker exec logstash-rz   logstash -t || { echo "rz config invalid"; exit 1; }
+            docker run --rm -v /opt/elk_dev/logstash/edge/config:/usr/share/logstash/config -v /opt/elk_dev/logstash/edge/pipelines/forwarder:/usr/share/logstash/pipeline docker.elastic.co/logstash/logstash:${{ env.LOGSTASH_VERSION }} --config.test_and_exit || { echo "edge config invalid"; exit 1; }
+            docker run --rm -v /opt/elk_dev/logstash/rz/config:/usr/share/logstash/config -v /opt/elk_dev/logstash/rz/pipelines/rz:/usr/share/logstash/pipeline docker.elastic.co/logstash/logstash:${{ env.LOGSTASH_VERSION }} --config.test_and_exit || { echo "rz config invalid"; exit 1; }
           '
