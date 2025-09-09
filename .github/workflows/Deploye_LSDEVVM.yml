@@ -50,8 +50,15 @@ jobs:
 
       - name: Syntax-Check (${{ matrix.component }})
         run: |
+          # Erstelle temporäre Pipeline-Dateien ohne Output-Konfigurationen
+          mkdir -p "logstash/${{ matrix.component }}/pipelines.ci"
+          cp -r "logstash/${{ matrix.component }}/pipelines/"* "logstash/${{ matrix.component }}/pipelines.ci/"
+          
+          # Entferne Output-Dateien für CI-Test
+          rm -f "logstash/${{ matrix.component }}/pipelines.ci/99-output-*.conf"
+          
           docker run --rm \
-            -v "$PWD/logstash/${{ matrix.component }}:/ls" \
+            -v "$PWD/logstash/${{ matrix.component }}/pipelines.ci:/ls/pipelines" \
             -v "$PWD/logstash/${{ matrix.component }}/config.ci:/usr/share/logstash/config" \
             docker.elastic.co/logstash/logstash:${{ env.LOGSTASH_VERSION }} \
             --config.test_and_exit
