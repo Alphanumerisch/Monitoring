@@ -16,7 +16,7 @@ jobs:
   deploy:
     name: Deploy to LS Dev VM (rsync only changed, exclude outputs)
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
 
@@ -25,22 +25,14 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y rsync
           mkdir -p "$HOME/.ssh"
-          # Falls dein Key eine Passphrase hat, optional ssh-agent verwenden:
-          if [ -n "${{ secrets.SSH_PASSPHRASE_LS_DEV_VM || '' }}" ]; then
-            eval "$(ssh-agent -s)"
-            ssh-add - <<< "${{ secrets.SSH_KEY_LS_DEV_VM }}" <<< "${{ secrets.SSH_PASSPHRASE_LS_DEV_VM }}"
-          else
-            echo "${{ secrets.SSH_KEY_LS_DEV_VM }}" > "$HOME/.ssh/id_ed25519"
-            chmod 600 "$HOME/.ssh/id_ed25519"
-          fi
+          echo "${{ secrets.SSH_KEY_LS_DEV_VM }}" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
           {
             echo "Host target"
             echo "  HostName ${{ secrets.SSH_HOST_LS_DEV_VM }}"
             echo "  User ${{ secrets.SSH_USER_LS_DEV_VM }}"
             echo "  Port ${{ secrets.SSH_PORT_LS_DEV_VM }}"
-            if [ -z "${{ secrets.SSH_PASSPHRASE_LS_DEV_VM || '' }}" ]; then
-              echo "  IdentityFile $HOME/.ssh/id_ed25519"
-            fi
+            echo "  IdentityFile $HOME/.ssh/id_ed25519"
             echo "  StrictHostKeyChecking no"
           } >> "$HOME/.ssh/config"
 
