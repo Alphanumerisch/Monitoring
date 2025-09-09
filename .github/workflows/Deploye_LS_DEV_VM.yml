@@ -27,7 +27,8 @@ jobs:
         mkdir -p temp_edge_pipelines
         
         # Kopiere alle Dateien außer 99-output-to-rz.conf
-        rsync -av --exclude='99-output-to-rz.conf' logstash/edge/pipelines/ temp_edge_pipelines/
+        cp -r logstash/edge/pipelines/* temp_edge_pipelines/ 2>/dev/null || true
+        rm -f temp_edge_pipelines/99-output-to-rz.conf
         
     - name: Clean Edge Pipelines on Server
       uses: appleboy/ssh-action@v1.2.0
@@ -60,7 +61,8 @@ jobs:
         mkdir -p temp_rz_pipelines
         
         # Kopiere alle Dateien außer 99-output-es.conf und input-edge.conf
-        rsync -av --exclude='99-output-es.conf' --exclude='input-edge.conf' logstash/rz/pipelines/ temp_rz_pipelines/
+        cp -r logstash/rz/pipelines/* temp_rz_pipelines/ 2>/dev/null || true
+        rm -f temp_rz_pipelines/99-output-es.conf temp_rz_pipelines/input-edge.conf
         
     - name: Clean RZ Pipelines on Server
       uses: appleboy/ssh-action@v1.2.0
