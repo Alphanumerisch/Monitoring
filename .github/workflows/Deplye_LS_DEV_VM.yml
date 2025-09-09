@@ -33,7 +33,8 @@ jobs:
           pipeline.ecs_compatibility: v8
           config.reload.automatic: false
           xpack.monitoring.enabled: false
-          http.enabled: false        
+          http.enabled: false
+          path.config: /ls/pipelines
           YAML
 
       - name: Syntax-Check (${{ matrix.component }})
@@ -41,7 +42,7 @@ jobs:
           docker run --rm \
             -v "$PWD/logstash/${{ matrix.component }}:/ls" \
             docker.elastic.co/logstash/logstash:${{ env.LOGSTASH_VERSION }} \
-            bash -lc 'logstash -t -f /ls/pipelines/*.conf --path.settings /ls/config.ci'
+            bash -lc 'logstash -t --path.settings /ls/config.ci'
 
   deploy:
     name: Deploy to LS Dev VM (rsync only changed, exclude outputs)
