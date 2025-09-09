@@ -1,0 +1,13 @@
+service: utm.syslog
+index_pattern: "logs-<kunde>-utm-syslog-*"
+write_alias: "logs-<kunde>-utm-syslog-write"
+ilm_policy: "utm-syslog-7dhot-90dwarm-del365"
+settings_component: "ct-utm-syslog-settings-v1"
+components:
+- ct-common-settings
+- ct-ecs-common
+- ct-utm-syslog-mapping
+- ct-utm-syslog-settings-v1
+priority: 500
+
+
