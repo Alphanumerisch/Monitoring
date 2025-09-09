@@ -24,7 +24,7 @@ jobs:
       - name: Pull Logstash image
         run: docker pull docker.elastic.co/logstash/logstash:${{ env.LOGSTASH_VERSION }}
 
-      # === CI-only Settings: verhindert Fehler wegen ${...} Variablen ===
+      # === CI-only Settings: komplett eigenständige Konfiguration ===
       - name: Prepare CI-only settings (${{ matrix.component }})
         run: |
           mkdir -p "logstash/${{ matrix.component }}/config.ci"
@@ -37,6 +37,15 @@ jobs:
           path.config: /ls/pipelines
           path.data: /tmp/logstash-data
           path.logs: /tmp/logstash-logs
+          pipeline.workers: 1
+          pipeline.batch.size: 1
+          pipeline.batch.delay: 50
+          YAML
+          
+          # Erstelle eine minimale pipelines.yml für CI
+          cat > "logstash/${{ matrix.component }}/config.ci/pipelines.yml" <<'YAML'
+          - pipeline.id: main
+            path.config: "/ls/pipelines"
           YAML
 
       - name: Syntax-Check (${{ matrix.component }})
@@ -44,7 +53,7 @@ jobs:
           docker run --rm \
             -v "$PWD/logstash/${{ matrix.component }}:/ls" \
             docker.elastic.co/logstash/logstash:${{ env.LOGSTASH_VERSION }} \
-            bash -lc 'logstash -t --path.settings /ls/config.ci --path.config /ls/pipelines'
+            bash -lc 'logstash -t --path.settings /ls/config.ci'
 
   deploy:
     name: Deploy to LS Dev VM (rsync only changed, exclude outputs)
