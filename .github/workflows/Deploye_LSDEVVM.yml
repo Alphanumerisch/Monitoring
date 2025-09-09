@@ -1,12 +1,12 @@
 name: Deploy to LS Dev VM
 
 on:
+  workflow_dispatch:
   push:
     branches: ["feature/**", "change/**", "bugfix/**"]
     paths:
       - "logstash/**"
       - ".github/workflows/**"
-  workflow_dispatch:
 
 env:
   LOGSTASH_VERSION: "8.13.4"
