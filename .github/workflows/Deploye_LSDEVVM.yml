@@ -4,9 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches: ["feature/**", "change/**", "bugfix/**"]
-    paths:
-      - "logstash/**"
-      - ".github/workflows/**"
 
 env:
   LOGSTASH_VERSION: "8.13.4"
@@ -15,6 +12,7 @@ jobs:
   deploy:
     name: Deploy to LS Dev VM
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (contains(github.event.head_commit.modified, 'logstash/') || contains(github.event.head_commit.modified, '.github/workflows/')))
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
