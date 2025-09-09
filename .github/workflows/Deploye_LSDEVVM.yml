@@ -51,12 +51,7 @@ jobs:
             logstash/edge/pipelines/ \
             target:/opt/elk_dev/logstash/edge/pipelines/forwarder/
 
-      # === EDGE: config → /opt/elk_dev/logstash/edge/config/ ===
-      - name: RSYNC edge config
-        run: |
-          rsync -e "ssh target" -avz --checksum \
-            logstash/edge/config/ \
-            target:/opt/elk_dev/logstash/edge/config/
+      
 
       # === RZ: pipelines → /opt/elk_dev/logstash/rz/pipelines/rz/ ===
       - name: RSYNC rz pipelines (exclude outputs)
@@ -66,12 +61,7 @@ jobs:
             logstash/rz/pipelines/ \
             target:/opt/elk_dev/logstash/rz/pipelines/rz/
 
-      # === RZ: config → /opt/elk_dev/logstash/rz/config/ ===
-      - name: RSYNC rz config
-        run: |
-          rsync -e "ssh target" -avz --checksum \
-            logstash/rz/config/ \
-            target:/opt/elk_dev/logstash/rz/config/
+    
 
       # === Optional: kurzer Container-Check (kein Reload nötig – Auto-Reload aktiv) ===
       - name: Sanity check in containers
