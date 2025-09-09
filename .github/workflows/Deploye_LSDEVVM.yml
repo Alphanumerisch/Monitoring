@@ -7,6 +7,7 @@ on:
       - "logstash/**"
       - ".github/workflows/**"
   pull_request:
+  workflow_dispatch:
 
 env:
   LOGSTASH_VERSION: "8.13.4"
