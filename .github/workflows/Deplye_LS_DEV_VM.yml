@@ -20,14 +20,29 @@ jobs:
       matrix: { component: [edge, rz] }
     steps:
       - uses: actions/checkout@v4
+
       - name: Pull Logstash image
         run: docker pull docker.elastic.co/logstash/logstash:${{ env.LOGSTASH_VERSION }}
+
+      # === CI-only Settings: verhindert Fehler wegen ${...} Variablen ===
+      - name: Prepare CI-only settings (${{ matrix.component }})
+        run: |
+          mkdir -p "logstash/${{ matrix.component }}/config.ci"
+          cat > "logstash/${{ matrix.component }}/config.ci/logstash.yml" <<'YAML'
+          node.name: ci-${{ matrix.component }}
+          pipeline.ecs_compatibility: v8
+          config.reload.automatic: false
+          xpack.monitoring.enabled: false
+          http.enabled: false
+          path.config: /ls/pipelines
+          YAML
+
       - name: Syntax-Check (${{ matrix.component }})
         run: |
           docker run --rm \
             -v "$PWD/logstash/${{ matrix.component }}:/ls" \
             docker.elastic.co/logstash/logstash:${{ env.LOGSTASH_VERSION }} \
-            bash -lc 'logstash -t -f /ls/pipelines/*.conf --path.settings /ls/config'
+            bash -lc 'logstash -t -f /ls/pipelines/*.conf --path.settings /ls/config.ci'
 
   deploy:
     name: Deploy to LS Dev VM (rsync only changed, exclude outputs)
@@ -37,22 +52,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # === SSH + rsync vorbereiten ===
       - name: Install rsync & SSH config
         run: |
           sudo apt-get update && sudo apt-get install -y rsync
-          install -m 700 -d "$HOME/.ssh"
-          echo "${{ secrets.SSH_KEY_LS_DEV_VM }}" > "$HOME/.ssh/id_ed25519"
-          chmod 600 "$HOME/.ssh/id_ed25519"
+          mkdir -p "$HOME/.ssh"
+          # Falls dein Key eine Passphrase hat, optional ssh-agent verwenden:
+          if [ -n "${{ secrets.SSH_PASSPHRASE_LS_DEV_VM || '' }}" ]; then
+            eval "$(ssh-agent -s)"
+            ssh-add - <<< "${{ secrets.SSH_KEY_LS_DEV_VM }}" <<< "${{ secrets.SSH_PASSPHRASE_LS_DEV_VM }}"
+          else
+            echo "${{ secrets.SSH_KEY_LS_DEV_VM }}" > "$HOME/.ssh/id_ed25519"
+            chmod 600 "$HOME/.ssh/id_ed25519"
+          fi
           {
             echo "Host target"
             echo "  HostName ${{ secrets.SSH_HOST_LS_DEV_VM }}"
             echo "  User ${{ secrets.SSH_USER_LS_DEV_VM }}"
             echo "  Port ${{ secrets.SSH_PORT_LS_DEV_VM }}"
-            echo "  IdentityFile $HOME/.ssh/id_ed25519"
+            if [ -z "${{ secrets.SSH_PASSPHRASE_LS_DEV_VM || '' }}" ]; then
+              echo "  IdentityFile $HOME/.ssh/id_ed25519"
+            fi
             echo "  StrictHostKeyChecking no"
           } >> "$HOME/.ssh/config"
 
-      # EDGE: pipelines → /opt/elk_dev/logstash/edge/pipelines/forwarder/
+      # === EDGE: pipelines → /opt/elk_dev/logstash/edge/pipelines/forwarder/ ===
       - name: RSYNC edge pipelines (exclude outputs)
         run: |
           rsync -e "ssh target" -avz --checksum \
@@ -61,14 +85,14 @@ jobs:
             logstash/edge/pipelines/ \
             target:/opt/elk_dev/logstash/edge/pipelines/forwarder/
 
-      # EDGE: config → /opt/elk_dev/logstash/edge/config/
+      # === EDGE: config → /opt/elk_dev/logstash/edge/config/ ===
       - name: RSYNC edge config
         run: |
           rsync -e "ssh target" -avz --checksum \
             logstash/edge/config/ \
             target:/opt/elk_dev/logstash/edge/config/
 
-      # RZ: pipelines → /opt/elk_dev/logstash/rz/pipelines/rz/
+      # === RZ: pipelines → /opt/elk_dev/logstash/rz/pipelines/rz/ ===
       - name: RSYNC rz pipelines (exclude outputs)
         run: |
           rsync -e "ssh target" -avz --checksum \
@@ -77,14 +101,14 @@ jobs:
             logstash/rz/pipelines/ \
             target:/opt/elk_dev/logstash/rz/pipelines/rz/
 
-      # RZ: config → /opt/elk_dev/logstash/rz/config/
+      # === RZ: config → /opt/elk_dev/logstash/rz/config/ ===
       - name: RSYNC rz config
         run: |
           rsync -e "ssh target" -avz --checksum \
             logstash/rz/config/ \
             target:/opt/elk_dev/logstash/rz/config/
 
-      # Optional: kurzer Container-Check (kein Reload nötig – auto reload aktiv)
+      # === Optional: kurzer Container-Check (kein Reload nötig – Auto-Reload aktiv) ===
       - name: Sanity check in containers
         run: |
           ssh target '
