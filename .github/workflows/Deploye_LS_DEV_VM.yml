@@ -79,6 +79,13 @@ jobs:
           # Lösche alle Dateien im Zielverzeichnis außer 99-output-to-rz.conf und input-edge.conf
           find /opt/elk_dev/logstash/rz/pipelines/rz -type f ! -name "99-output-to-rz.conf" ! -name "input-edge.conf" -delete
           
+    - name: Prepare RZ Pipeline Archive
+      run: |
+        # Erstelle ein tar-Archiv der RZ Pipeline Dateien
+        cd temp_rz_pipelines
+        tar -czf ../rz_pipelines.tar.gz *
+        cd ..
+        
     - name: Sync RZ Pipelines
       uses: appleboy/ssh-action@v1.2.0
       with:
@@ -93,34 +100,30 @@ jobs:
           # Lösche alle Dateien im Zielverzeichnis außer 99-output-to-rz.conf und input-edge.conf
           find /opt/elk_dev/logstash/rz/pipelines/rz -type f ! -name "99-output-to-rz.conf" ! -name "input-edge.conf" -delete
           
-          # Erstelle temporäres Verzeichnis auf dem Server
-          mkdir -p /tmp/rz_pipelines_upload
+          # Erstelle temporäres Verzeichnis
+          mkdir -p /tmp/rz_upload
           
-          # Kopiere alle Dateien aus temp_rz_pipelines nach /tmp/rz_pipelines_upload
-          # (Dies wird über einen separaten SCP-Befehl gemacht)
-        
-    - name: Upload RZ Pipeline Files
+          # Warte auf Datei-Upload (wird über Base64 gemacht)
+          echo "Bereit für Datei-Upload..."
+          
+    - name: Upload RZ Pipeline Archive
       run: |
-        # Verwende scp direkt mit SSH-Agent
-        scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P ${{ secrets.SSH_PORT_LS_DEV_VM }} -r temp_rz_pipelines/* ${{ secrets.SSH_USER_LS_DEV_VM }}@${{ secrets.SSH_HOST_LS_DEV_VM }}:/tmp/rz_pipelines_upload/
+        # Konvertiere tar-Archiv zu Base64 und übertrage es
+        base64_archive=$(base64 -w 0 rz_pipelines.tar.gz)
         
-    - name: Move RZ Pipeline Files to Final Location
-      uses: appleboy/ssh-action@v1.2.0
-      with:
-        host: ${{ secrets.SSH_HOST_LS_DEV_VM }}
-        username: ${{ secrets.SSH_USER_LS_DEV_VM }}
-        key: ${{ secrets.SSH_KEY_LS_DEV_VM }}
-        port: ${{ secrets.SSH_PORT_LS_DEV_VM }}
-        script: |
-          # Verschiebe Dateien von /tmp nach dem finalen Verzeichnis
-          cp -r /tmp/rz_pipelines_upload/* /opt/elk_dev/logstash/rz/pipelines/rz/
-          
-          # Aufräumen
-          rm -rf /tmp/rz_pipelines_upload
+        # Übertrage Base64-String über SSH
+        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p ${{ secrets.SSH_PORT_LS_DEV_VM }} ${{ secrets.SSH_USER_LS_DEV_VM }}@${{ secrets.SSH_HOST_LS_DEV_VM }} "
+          echo '$base64_archive' | base64 -d > /tmp/rz_upload/rz_pipelines.tar.gz &&
+          cd /tmp/rz_upload &&
+          tar -xzf rz_pipelines.tar.gz &&
+          cp -r * /opt/elk_dev/logstash/rz/pipelines/rz/ &&
+          rm -rf /tmp/rz_upload &&
+          echo 'RZ Pipelines erfolgreich übertragen!'
+        "
         
     - name: Cleanup
       run: |
-        rm -rf temp_edge_pipelines temp_rz_pipelines
+        rm -rf temp_edge_pipelines temp_rz_pipelines rz_pipelines.tar.gz
         
     - name: Deployment Summary
       run: |
