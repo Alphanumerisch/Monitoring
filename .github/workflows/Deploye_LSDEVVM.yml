@@ -1,4 +1,4 @@
-name: Deploy to LS Dev VM (rsync, selective)
+name: Deploy to LS Dev VM
 
 on:
   push:
@@ -6,7 +6,6 @@ on:
     paths:
       - "logstash/**"
       - ".github/workflows/**"
-  pull_request:
   workflow_dispatch:
 
 env:
@@ -14,52 +13,53 @@ env:
 
 jobs:
   deploy:
-    name: Deploy to LS Dev VM (rsync only changed, exclude outputs)
+    name: Deploy to LS Dev VM
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      # === SSH + rsync vorbereiten ===
-      - name: Install rsync & SSH config
+      - name: Setup SSH and rsync
         run: |
           sudo apt-get update && sudo apt-get install -y rsync
           mkdir -p "$HOME/.ssh"
           echo "${{ secrets.SSH_KEY_LS_DEV_VM }}" > "$HOME/.ssh/id_ed25519"
           chmod 600 "$HOME/.ssh/id_ed25519"
-          {
-            echo "Host target"
-            echo "  HostName ${{ secrets.SSH_HOST_LS_DEV_VM }}"
-            echo "  User ${{ secrets.SSH_USER_LS_DEV_VM }}"
-            echo "  Port ${{ secrets.SSH_PORT_LS_DEV_VM }}"
-            echo "  IdentityFile $HOME/.ssh/id_ed25519"
-            echo "  StrictHostKeyChecking no"
-          } >> "$HOME/.ssh/config"
+          cat > "$HOME/.ssh/config" << EOF
+          Host target
+            HostName ${{ secrets.SSH_HOST_LS_DEV_VM }}
+            User ${{ secrets.SSH_USER_LS_DEV_VM }}
+            Port ${{ secrets.SSH_PORT_LS_DEV_VM }}
+            IdentityFile $HOME/.ssh/id_ed25519
+            StrictHostKeyChecking no
+          EOF
 
-      # === EDGE: pipelines → /opt/elk_dev/logstash/edge/pipelines/forwarder/ ===
-      - name: RSYNC edge pipelines (exclude outputs)
+      - name: Deploy edge pipelines
         run: |
           rsync -e "ssh target" -avz --checksum \
             --exclude '99-output-to-rz.conf' \
             logstash/edge/pipelines/ \
             target:/opt/elk_dev/logstash/edge/pipelines/forwarder/
 
-      
-
-      # === RZ: pipelines → /opt/elk_dev/logstash/rz/pipelines/rz/ ===
-      - name: RSYNC rz pipelines (exclude outputs)
+      - name: Deploy rz pipelines
         run: |
           rsync -e "ssh target" -avz --checksum \
             --exclude '99-output-es.conf' \
             logstash/rz/pipelines/ \
             target:/opt/elk_dev/logstash/rz/pipelines/rz/
 
-    
-
-      # === Optional: kurzer Container-Check (kein Reload nötig – Auto-Reload aktiv) ===
-      - name: Sanity check in containers
+      - name: Test configuration
         run: |
           ssh target '
-            docker run --rm -v /opt/elk_dev/logstash/edge/config:/usr/share/logstash/config -v /opt/elk_dev/logstash/edge/pipelines/forwarder:/usr/share/logstash/pipeline docker.elastic.co/logstash/logstash:${{ env.LOGSTASH_VERSION }} --config.test_and_exit || { echo "edge config invalid"; exit 1; }
-            docker run --rm -v /opt/elk_dev/logstash/rz/config:/usr/share/logstash/config -v /opt/elk_dev/logstash/rz/pipelines/rz:/usr/share/logstash/pipeline docker.elastic.co/logstash/logstash:${{ env.LOGSTASH_VERSION }} --config.test_and_exit || { echo "rz config invalid"; exit 1; }
+            docker run --rm \
+              -v /opt/elk_dev/logstash/edge/config:/usr/share/logstash/config \
+              -v /opt/elk_dev/logstash/edge/pipelines/forwarder:/usr/share/logstash/pipeline \
+              docker.elastic.co/logstash/logstash:${{ env.LOGSTASH_VERSION }} \
+              --config.test_and_exit || { echo "Edge config invalid"; exit 1; }
+            
+            docker run --rm \
+              -v /opt/elk_dev/logstash/rz/config:/usr/share/logstash/config \
+              -v /opt/elk_dev/logstash/rz/pipelines/rz:/usr/share/logstash/pipeline \
+              docker.elastic.co/logstash/logstash:${{ env.LOGSTASH_VERSION }} \
+              --config.test_and_exit || { echo "RZ config invalid"; exit 1; }
           '
