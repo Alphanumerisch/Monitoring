@@ -1,20 +1,18 @@
 name: Test SSH to VM
 on:
-  workflow_dispatch:   # manueller Start im Actions-Tab
+  workflow_dispatch:
 
 jobs:
   ssh-test:
     runs-on: ubuntu-latest
     steps:
       - name: Test SSH connection
-      - run: |
-          eval $(ssh-agent -s)
-          ssh-add <(echo "${{ secrets.SSH_KEY_VM }}") <<< "${{ secrets.SSH_PASSPHRASE_VM }}"
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SSH_HOST_LS_DEV_VM }}
           username: ${{ secrets.SSH_USER_LS_DEV_VM }}
           key: ${{ secrets.SSH_KEY_LS_DEV_VM }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE_LS_DEV_VM }} # <-- Passphrase-Secret
           port: ${{ secrets.SSH_PORT_LS_DEV_VM }}
           script: |
             hostname
