@@ -1,0 +1,17 @@
+name: CI Feature Pipeline
+
+# Workflow-Trigger
+on:
+  push:
+    branches:
+      - 'feature/pipeline/**'   # reagiert nur auf feature/pipeline/xyz
+
+jobs:
+  hello:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4   # Repo auschecken
+      - name: Sage Hallo
+        run: |
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Hallo von CI auf feature/pipeline!"
