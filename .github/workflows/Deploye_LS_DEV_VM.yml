@@ -21,6 +21,10 @@ jobs:
       with:
         ssh-private-key: ${{ secrets.SSH_KEY_LS_DEV_VM }}
         
+    - name: Add SSH Host Key
+      run: |
+        ssh-keyscan -p ${{ secrets.SSH_PORT_LS_DEV_VM }} ${{ secrets.SSH_HOST_LS_DEV_VM }} >> ~/.ssh/known_hosts
+        
     - name: Sync Edge Pipelines
       run: |
         # Erstelle temporäres Verzeichnis ohne die ausgeschlossene Datei
