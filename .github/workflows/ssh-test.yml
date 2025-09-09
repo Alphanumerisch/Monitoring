@@ -12,7 +12,6 @@ jobs:
           host: ${{ secrets.SSH_HOST_LS_DEV_VM }}
           username: ${{ secrets.SSH_USER_LS_DEV_VM }}
           key: ${{ secrets.SSH_KEY_LS_DEV_VM }}
-          passphrase: ${{ secrets.SSH_PASSPHRASE_LS_DEV_VM }} # <-- Passphrase-Secret
           port: ${{ secrets.SSH_PORT_LS_DEV_VM }}
           script: |
             hostname
